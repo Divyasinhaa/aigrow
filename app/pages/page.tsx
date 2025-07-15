@@ -10,6 +10,7 @@ export default function Home() {
   const [animatedText, setAnimatedText] = useState<string>('');
   const [darkMode, setDarkMode] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+
   const handleAskAI = async () => {
     if (!input.trim()) return;
     setLoading(true);
@@ -92,7 +93,7 @@ export default function Home() {
                 <button
                   onClick={handleCopy}
                   className="text-sm text-indigo-600 dark:text-indigo-300 hover:underline"
-                  >
+                >
                   {copied ? 'Copied!' : 'Copy'}
                 </button>
               </div>
