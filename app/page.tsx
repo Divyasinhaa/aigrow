@@ -1,212 +1,152 @@
 'use client';
+import { useState, useEffect, useRef } from 'react';
 
-import { useState, useEffect } from 'react';
+type Message = { role: 'user' | 'ai'; text: string };
 
 export default function Home() {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [feature, setFeature] = useState('ask');
-  const [output, setOutput] = useState('');
-  const [animatedText, setAnimatedText] = useState('');
   const [loading, setLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
+  const suggestions = [
+    { category: "Life & Growth", questions: [
+      "What are the three most important values in life?",
+      "How do I overcome fear of failure?",
+      "How can I make learning new skills faster?"
+    ]},
+    { category: "Technology", questions: [
+      "How will AI change jobs in the next decade?",
+      "What is quantum computing in simple terms?",
+      "How does blockchain work?"
+    ]},
+    { category: "Future Trends", questions: [
+      "What is the future of renewable energy tech?",
+      "What’s the fastest way to learn coding?",
+      "What are the top 5 emerging technologies in 2025?"
+    ]}
+  ];
+
+  // Load from localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (darkMode) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    }
-  }, [darkMode]);
+    const savedMessages = localStorage.getItem('chatHistory');
+    if (savedMessages) setMessages(JSON.parse(savedMessages));
 
-  const mockAIResponse = (text: string, feature: string): string => {
-    const lowerText = text.toLowerCase();
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = savedTheme ?? (prefersDark ? 'dark' : 'light');
+    setDarkMode(theme === 'dark');
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, []);
 
-    // 🌐 Technology Cases
-    if (lowerText.includes('artificial intelligence') || lowerText.includes('ai')) {
-      return `🤖 Artificial Intelligence:\nAI simulates human intelligence using algorithms and data. Applications include chatbots, self-driving cars, and medical diagnosis.`;
-    }
+  // Save to localStorage
+  useEffect(() => {
+    localStorage.setItem('chatHistory', JSON.stringify(messages));
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-    if (lowerText.includes('blockchain') || lowerText.includes('cryptocurrency')) {
-      return `🔗 Blockchain & Crypto:\nBlockchain is a secure digital ledger used in cryptocurrencies like Bitcoin. It's also useful in identity management and smart contracts.`;
-    }
-
-    if (lowerText.includes('cybersecurity') || lowerText.includes('hacking') || lowerText.includes('data breach')) {
-      return `🛡 Cybersecurity:\nIt protects data and systems from malicious attacks. Essential practices include encryption, firewalls, and ethical hacking.`;
-    }
-
-    if (lowerText.includes('web development') || lowerText.includes('frontend') || lowerText.includes('backend')) {
-      return `🌐 Web Development:\nFrontend (React, HTML, CSS) and backend (Node, databases) work together to build modern websites.`;
-    }
-
-    if (lowerText.includes('programming') || lowerText.includes('developer')) {
-      return `👨‍💻 Programming:\nWriting instructions in languages like Python, JavaScript, C++. Helps solve problems and build digital systems.`;
-    }
-
-    if (lowerText.includes('cloud') || lowerText.includes('aws') || lowerText.includes('azure')) {
-      return `☁️ Cloud Computing:\nAWS, Azure, GCP let you host applications on remote servers. Scalable and cost-effective.`;
-    }
-
-    if (lowerText.includes('iot') || lowerText.includes('internet of things')) {
-      return `📡 Internet of Things (IoT):\nConnects devices like lights, sensors, fridges to the internet. Enables automation and monitoring.`;
-    }
-
-    if (lowerText.includes('quantum computing') || lowerText.includes('qubit')) {
-      return `⚛️ Quantum Computing:\nUses qubits to perform computations far beyond classical computers. Still experimental, with huge potential.`;
-    }
-
-    if (lowerText.includes('vr') || lowerText.includes('ar')) {
-      return `🕶️ Virtual & Augmented Reality:\nVR creates digital worlds, AR adds virtual elements to real ones. Used in gaming, training, and design.`;
-    }
-
-    if (lowerText.includes('web3') || lowerText.includes('decentralized')) {
-      return `🌐 Web3:\nThe decentralized web powered by blockchain. You own your data and identity.`;
-    }
-
-    // 🧠 Feature Logic
-    switch (feature) {
-      case 'ask':
-        return `🤖 Here's a helpful response:\n\n"${text}"\n\nYou asked something deep. Consider exploring related resources for better clarity.`;
-
-      case 'summarize':
-        return `📝 Summary:\n${text.split(' ').slice(0, 12).join(' ')}...`;
-
-      case 'sentiment':
-        if (lowerText.includes('bad') || lowerText.includes('hate') || lowerText.includes('sad')) {
-          return '😞 Negative sentiment detected. Hope things improve soon.';
-        } else if (lowerText.includes('good') || lowerText.includes('happy') || lowerText.includes('love')) {
-          return '😊 Positive sentiment detected. Stay joyful!';
-        } else {
-          return '😐 Neutral tone detected. Clear and calm.';
-        }
-
-      case 'joke':
-        const jokes = [
-          '😂 Why don’t scientists trust atoms? Because they make up everything!',
-          '🤣 Why did the math book look sad? It had too many problems.',
-          '😅 My computer needed a break, now it only shows beach wallpapers.',
-          '😆 Parallel lines have so much in common… they never meet.',
-          '🧠 AI joke: I’d tell you a deep learning joke, but you might not get it without enough data.',
-          '💾 Programmer joke: I changed my password to "incorrect". So now it reminds me when I forget.'
-        ];
-        return jokes[Math.floor(Math.random() * jokes.length)];
-
-      default:
-        return '🤷 Unknown feature. Try another one.';
-    }
+  const toggleDarkMode = () => {
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    document.documentElement.classList.toggle('dark', newMode);
+    localStorage.setItem('theme', newMode ? 'dark' : 'light');
   };
 
-  const handleGenerate = async () => {
-    if (!input && feature !== 'joke') return;
+  const getAIResponse = async (question: string) => {
+    setMessages(prev => [...prev, { role: 'user', text: question }]);
     setLoading(true);
-    setOutput('');
-    setAnimatedText('');
 
+    // Simulated API call (replace with your real backend)
     setTimeout(() => {
-      const result = mockAIResponse(input, feature);
-      setOutput(result);
+      const fakeAnswer = `🔍 Here's what I found about "${question}":\n\n- Detailed, structured explanation.\n- Examples for clarity.\n- Actionable insights.`;
+      setMessages(prev => [...prev, { role: 'ai', text: fakeAnswer }]);
       setLoading(false);
-    }, 500);
+    }, 1200);
   };
 
-  useEffect(() => {
-    let i = 0;
-    if (output) {
-      const interval = setInterval(() => {
-        setAnimatedText((prev) => prev + output[i]);
-        i++;
-        if (i >= output.length) clearInterval(interval);
-      }, 20);
-      return () => clearInterval(interval);
-    }
-  }, [output]);
-
-  const handleCopy = async () => {
-    if (!animatedText) return;
-    await navigator.clipboard.writeText(animatedText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleSend = () => {
+    if (!input.trim()) return;
+    getAIResponse(input.trim());
+    setInput('');
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-100 to-indigo-200 dark:from-gray-900 dark:to-gray-800 px-4 sm:px-6 py-10 transition">
-      <div className="w-full max-w-3xl bg-white dark:bg-gray-900 shadow-2xl rounded-2xl p-6 sm:p-8 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-          <h1 className="text-2xl sm:text-3xl font-bold text-indigo-700 dark:text-indigo-300">
-            Simple AI Playground
-          </h1>
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="text-sm border border-indigo-400 dark:border-indigo-600 px-3 py-1 rounded-md text-indigo-700 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-800 transition"
-          >
-            {darkMode ? '☀ Light Mode' : '🌙 Dark Mode'}
-          </button>
-        </div>
-
-        {/* Feature Selector */}
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Choose a Feature:</label>
-          <select
-            value={feature}
-            onChange={(e) => setFeature(e.target.value)}
-            className="w-full p-2 rounded border dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-indigo-400"
-          >
-            <option value="ask">Ask a Question</option>
-            <option value="summarize">Summarize Text</option>
-            <option value="sentiment">Sentiment Analysis</option>
-            <option value="joke">Tell me a Joke</option>
-          </select>
-        </div>
-
-        {/* Input Area */}
-        {feature !== 'joke' && (
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Enter Text:</label>
-            <textarea
-              rows={4}
-              className="w-full p-3 border rounded-md resize-none dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-indigo-400"
-              placeholder="Type something here..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-            />
-          </div>
-        )}
-
-        {/* Generate Button */}
+    <main className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+      
+      {/* HEADER */}
+      <header className="flex justify-between items-center p-4 bg-white/70 dark:bg-gray-900/70 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50">
+        <h1 className="text-2xl font-extrabold bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+          AI GROW<br/>
+          Interactive AI Chatbot Platform
+        </h1>
         <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-md hover:bg-indigo-700 disabled:opacity-50 transition"
+          onClick={toggleDarkMode}
+          className="px-3 py-1 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow hover:opacity-80 transition"
         >
-          {loading ? (
-            <div className="flex items-center justify-center gap-2">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              <span>Thinking...</span>
-            </div>
-          ) : (
-            'Generate Response'
-          )}
+          {darkMode ? '☀️ Light' : '🌙 Dark'}
         </button>
+      </header>
 
-        {/* Output */}
-        {animatedText && (
-          <div className="border-t pt-4 border-gray-300 dark:border-gray-700 space-y-3">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-gray-800 dark:text-white">AI Output:</h2>
-              <button
-                onClick={handleCopy}
-                className="text-sm text-indigo-600 dark:text-indigo-300 hover:underline"
-              >
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
+      {/* SUGGESTIONS */}
+      <section className="p-4 space-y-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        {suggestions.map((group, idx) => (
+          <div key={idx}>
+            <h2 className="font-semibold text-sm mb-2 text-gray-700 dark:text-gray-300">{group.category}</h2>
+            <div className="flex flex-wrap gap-2">
+              {group.questions.map((q, i) => (
+                <button
+                  key={i}
+                  onClick={() => getAIResponse(q)}
+                  className="px-3 py-1 text-sm rounded-full bg-gradient-to-r from-blue-400 to-purple-400 text-white shadow hover:scale-105 transition"
+                >
+                  {q}
+                </button>
+              ))}
             </div>
-            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{animatedText}</p>
+          </div>
+        ))}
+      </section>
+
+      {/* CHAT AREA */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {messages.map((msg, idx) => (
+          <div
+            key={idx}
+            className={`max-w-xl p-3 rounded-lg whitespace-pre-line shadow ${
+              msg.role === 'user'
+                ? 'ml-auto bg-gradient-to-r from-blue-500 to-purple-500 text-white'
+                : 'mr-auto bg-gray-200 dark:bg-gray-700 dark:text-gray-100'
+            }`}
+          >
+            {msg.text}
+          </div>
+        ))}
+        {loading && (
+          <div className="mr-auto bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-3 py-2 rounded-lg animate-pulse">
+            AI is typing...
           </div>
         )}
+        <div ref={chatEndRef} />
       </div>
-    </div>
+
+      {/* INPUT BAR */}
+      <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex gap-2">
+        <input
+          type="text"
+          className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none transition"
+          placeholder="Ask me anything..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+        />
+        <button
+          onClick={handleSend}
+          className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:opacity-80 transition"
+        >
+          Send
+        </button>
+      </div>
+    </main>
   );
 }
