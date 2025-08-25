@@ -10,7 +10,6 @@ export default function Page() {
   const [darkMode, setDarkMode] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 🔹 Suggested questions
   const suggestions = [
     { category: "Life & Growth", questions: [
       "What are the three most important values in life?",
@@ -29,7 +28,6 @@ export default function Page() {
     ]}
   ];
 
-  // 🔹 Predefined answers
   const predefinedAnswers: Record<string, string> = {
     "What are the three most important values in life?":
       " The three most important values often considered are **integrity**, **empathy**, and **growth**. Integrity builds trust, empathy strengthens relationships, and growth ensures progress in life.",
@@ -76,7 +74,6 @@ export default function Page() {
     localStorage.setItem('theme', newMode ? 'dark' : 'light');
   };
 
-  // ⏳ Typing effect simulation
   const typeEffect = (text: string) => {
     let index = 0;
     const interval = setInterval(() => {
