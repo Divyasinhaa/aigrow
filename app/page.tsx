@@ -26,6 +26,14 @@ export default function Home() {
         "How does blockchain work?"
       ]
     },
+     {
+      category: "AI/ML Concepts",
+      questions: [
+        "What is AI?",
+        "What is ML?",
+        "What is the difference between AI and ML?"
+      ]
+    },
     {
       category: "Future Trends",
       questions: [
@@ -44,6 +52,12 @@ export default function Home() {
       "💡 View failure as feedback, not defeat. Break goals into small steps and celebrate progress.",
     "How can I make learning new skills faster?": 
       "⚡ Use active recall, spaced repetition, and learn by teaching others.",
+    "What is AI?":
+      "Computer actions that mimic human decision making based on learned experiences and data.",
+    "What is ML?":
+      "Processes that allow computers to derive conclusions from data.",
+    "What is the difference between AI and ML?:
+      " ML is a subset of AI that enables the ability for computers to learn outside of their programming.",
     "How will AI change jobs in the next decade?": 
       "🤖 AI will automate routine tasks, create new roles in AI ethics & engineering, and reshape industries.",
     "What is quantum computing in simple terms?": 
