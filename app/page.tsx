@@ -3,13 +3,14 @@ import { useState, useEffect, useRef } from 'react';
 
 type Message = { role: 'user' | 'ai'; text: string };
 
-export default function Home() {
+export default function Page() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // 🔹 Suggested questions
   const suggestions = [
     { category: "Life & Growth", questions: [
       "What are the three most important values in life?",
@@ -28,7 +29,29 @@ export default function Home() {
     ]}
   ];
 
-  // Load from localStorage
+  // 🔹 Predefined answers
+  const predefinedAnswers: Record<string, string> = {
+    "What are the three most important values in life?":
+      " The three most important values often considered are **integrity**, **empathy**, and **growth**. Integrity builds trust, empathy strengthens relationships, and growth ensures progress in life.",
+    "How do I overcome fear of failure?":
+      " Overcoming fear of failure requires reframing failure as **learning**, breaking goals into **small steps**, and practicing **self-compassion**. Each attempt brings you closer to success.",
+    "How can I make learning new skills faster?":
+      " Use the **80/20 rule** (focus on the most impactful parts), practice consistently, and apply what you learn immediately. Teaching others also accelerates mastery.",
+    "How will AI change jobs in the next decade?":
+      " AI will automate repetitive tasks but create new opportunities in **AI oversight, creativity, problem-solving, and human-centered roles**. The future is not jobless—it’s different jobs.",
+    "What is quantum computing in simple terms?":
+      " Quantum computing uses **qubits**, which can be 0 and 1 at the same time, unlike classical bits. This allows solving complex problems much faster, like drug discovery or encryption breaking.",
+    "How does blockchain work?":
+      " Blockchain is a **decentralized digital ledger** where transactions are stored in blocks linked together. Once recorded, data is nearly impossible to alter, ensuring security and transparency.",
+    "What is the future of renewable energy tech?":
+      " Expect massive growth in **solar, wind, and battery storage**. Innovations like **fusion energy** and **smart grids** will push sustainability forward.",
+    "What’s the fastest way to learn coding?":
+      " Start with **projects**, not just theory. Use free resources, practice daily, and contribute to open-source. Coding is best learned by doing.",
+    "What are the top 5 emerging technologies in 2025?":
+      " 1. Artificial Intelligence (AI) & Generative AI\n2. Quantum Computing\n3. 6G & Advanced Connectivity\n4. Biotechnology & Gene Editing\n5. Renewable Energy + Green Tech"
+  };
+
+  // Load chat + theme
   useEffect(() => {
     const savedMessages = localStorage.getItem('chatHistory');
     if (savedMessages) setMessages(JSON.parse(savedMessages));
@@ -40,7 +63,7 @@ export default function Home() {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, []);
 
-  // Save to localStorage
+  // Save chat
   useEffect(() => {
     localStorage.setItem('chatHistory', JSON.stringify(messages));
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -53,21 +76,67 @@ export default function Home() {
     localStorage.setItem('theme', newMode ? 'dark' : 'light');
   };
 
-  const getAIResponse = async (question: string) => {
-    setMessages(prev => [...prev, { role: 'user', text: question }]);
-    setLoading(true);
+  // ⏳ Typing effect simulation
+  const typeEffect = (text: string) => {
+    let index = 0;
+    const interval = setInterval(() => {
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (!last || last.role !== "ai") return prev;
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          ...last,
+          text: last.text + text[index]
+        };
+        return updated;
+      });
+      index++;
+      if (index >= text.length) clearInterval(interval);
+    }, 30); // typing speed (ms per char)
+  };
 
-    // Simulated API call (replace with your real backend)
-    setTimeout(() => {
-      const fakeAnswer = `🔍 Here's what I found about "${question}":\n\n- Detailed, structured explanation.\n- Examples for clarity.\n- Actionable insights.`;
-      setMessages(prev => [...prev, { role: 'ai', text: fakeAnswer }]);
+  // 🚀 Get response
+  const getResponse = async (question: string) => {
+    setMessages(prev => [...prev, { role: 'user', text: question }]);
+
+    // Show "thinking..."
+    setLoading(true);
+    setMessages(prev => [...prev, { role: "ai", text: "🤔 AI is thinking..." }]);
+
+    setTimeout(async () => {
+      let answer = "";
+
+      if (predefinedAnswers[question]) {
+        answer = predefinedAnswers[question];
+      } else {
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: question }),
+          });
+          const data = await res.json();
+          answer = data.answer;
+        } catch {
+          answer = "⚠️ Failed to fetch AI response.";
+        }
+      }
+
+      // Replace "thinking..." with typing effect
+      setMessages(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1] = { role: "ai", text: "" };
+        return updated;
+      });
+      typeEffect(answer);
+
       setLoading(false);
-    }, 1200);
+    }, 1200); // delay before AI starts "typing"
   };
 
   const handleSend = () => {
     if (!input.trim()) return;
-    getAIResponse(input.trim());
+    getResponse(input.trim());
     setInput('');
   };
 
@@ -97,7 +166,7 @@ export default function Home() {
               {group.questions.map((q, i) => (
                 <button
                   key={i}
-                  onClick={() => getAIResponse(q)}
+                  onClick={() => getResponse(q)}
                   className="px-3 py-1 text-sm rounded-full bg-gradient-to-r from-blue-400 to-purple-400 text-white shadow hover:scale-105 transition"
                 >
                   {q}
@@ -122,11 +191,6 @@ export default function Home() {
             {msg.text}
           </div>
         ))}
-        {loading && (
-          <div className="mr-auto bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-3 py-2 rounded-lg animate-pulse">
-            AI is typing...
-          </div>
-        )}
         <div ref={chatEndRef} />
       </div>
 
