@@ -56,7 +56,7 @@ export default function Home() {
       "Computer actions that mimic human decision making based on learned experiences and data.",
     "What is ML?":
       "Processes that allow computers to derive conclusions from data.",
-    "What is the difference between AI and ML?:
+    "What is the difference between AI and ML?":
       " ML is a subset of AI that enables the ability for computers to learn outside of their programming.",
     "How will AI change jobs in the next decade?": 
       "🤖 AI will automate routine tasks, create new roles in AI ethics & engineering, and reshape industries.",
