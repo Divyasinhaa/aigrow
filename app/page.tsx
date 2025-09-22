@@ -146,7 +146,7 @@ export default function Home() {
       </header>
 
       {/* SUGGESTIONS */}
-      <section className="p-4 space-y-3 bg-white/60 dark:bg-gray-800/70 border-b border-gray-300 dark:border-gray-700 sticky top-[68px] z-40">
+      <section className="p-4 space-y-3 bg-white/60 dark:bg-gray-800/70 border-b border-gray-300 dark:border-gray-700  z-40">
         {suggestions.map((group, idx) => (
           <div key={idx}>
             <h2 className="font-semibold text-sm mb-2 text-gray-800 dark:text-gray-200">{group.category}</h2>
