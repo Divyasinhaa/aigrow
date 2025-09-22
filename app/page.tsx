@@ -26,11 +26,8 @@ export default function Home() {
         "How does blockchain work?"
       ]
     },
-<<<<<<< HEAD
-    {
-=======
+
      {
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
       category: "AI/ML Concepts",
       questions: [
         "What is AI?",
@@ -47,7 +44,7 @@ export default function Home() {
       ]
     }
   ];
-<<<<<<< HEAD
+
 
   // Load chat history + theme
   useEffect(() => {
@@ -111,7 +108,7 @@ export default function Home() {
         { role: "ai", text: "⚠️ Error: could not connect to backend." },
       ]);
     }
-=======
+
 
   // Predefined answers for suggestions
   const predefinedAnswers: Record<string, string> = {
@@ -181,7 +178,6 @@ export default function Home() {
         { role: 'ai', text: answer }
       ]);
     }, 1500);
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
   };
 
   const handleSend = () => {
@@ -191,7 +187,7 @@ export default function Home() {
   };
 
   return (
-<<<<<<< HEAD
+
     <main className="min-h-screen flex flex-col 
       bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 
       dark:from-gray-950 dark:via-gray-900 dark:to-black 
@@ -208,7 +204,7 @@ export default function Home() {
         <button
           onClick={toggleDarkMode}
           className="px-3 py-1 rounded-lg bg-white/20 text-white shadow hover:bg-white/30 transition"
-=======
+
     <main className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-300">
       
       {/* HEADER */}
@@ -220,36 +216,36 @@ export default function Home() {
         <button
           onClick={toggleDarkMode}
           className="px-3 py-1 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow hover:opacity-80 transition"
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
+
         >
           {darkMode ? '☀️ Light' : '🌙 Dark'}
         </button>
       </header>
 
       {/* SUGGESTIONS */}
-<<<<<<< HEAD
+
       <section className="p-4 space-y-3 bg-white/60 dark:bg-gray-800/70 border-b border-gray-300 dark:border-gray-700">
         {suggestions.map((group, idx) => (
           <div key={idx}>
             <h2 className="font-semibold text-sm mb-2 text-gray-800 dark:text-gray-200">{group.category}</h2>
-=======
+
       <section className="p-4 space-y-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         {suggestions.map((group, idx) => (
           <div key={idx}>
             <h2 className="font-semibold text-sm mb-2 text-gray-700 dark:text-gray-300">{group.category}</h2>
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
+
             <div className="flex flex-wrap gap-2">
               {group.questions.map((q, i) => (
                 <button
                   key={i}
                   onClick={() => getAIResponse(q)}
-<<<<<<< HEAD
+
                   className="px-3 py-1 text-sm rounded-full 
                     bg-gradient-to-r from-indigo-400 to-pink-400 
                     text-white shadow-md hover:scale-105 transition"
-=======
+
                   className="px-3 py-1 text-sm rounded-full bg-gradient-to-r from-blue-400 to-purple-400 text-white shadow hover:scale-105 transition"
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
+
                 >
                   {q}
                 </button>
@@ -264,17 +260,17 @@ export default function Home() {
         {messages.map((msg, idx) => (
           <div
             key={idx}
-<<<<<<< HEAD
+
             className={`max-w-xl p-3 rounded-xl shadow-md text-sm whitespace-pre-line leading-relaxed ${
               msg.role === 'user'
                 ? 'ml-auto bg-gradient-to-r from-indigo-500 to-pink-500 text-white'
                 : 'mr-auto bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
-=======
+
             className={`max-w-xl p-3 rounded-lg whitespace-pre-line shadow ${
               msg.role === 'user'
                 ? 'ml-auto bg-gradient-to-r from-blue-500 to-purple-500 text-white'
                 : 'mr-auto bg-gray-200 dark:bg-gray-700 dark:text-gray-100'
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
+
             }`}
           >
             {msg.text}
@@ -284,7 +280,7 @@ export default function Home() {
       </div>
 
       {/* INPUT BAR */}
-<<<<<<< HEAD
+
       <div className="p-4 border-t border-gray-300 dark:border-gray-700 
         bg-white/70 dark:bg-gray-900/80 flex gap-2">
         <input
@@ -292,25 +288,25 @@ export default function Home() {
           className="flex-1 px-3 py-2 rounded-lg border border-gray-400 dark:border-gray-600 
             dark:bg-gray-800 focus:ring-2 focus:ring-pink-500 outline-none transition"
           placeholder="💬 Ask me anything..."
-=======
+
       <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex gap-2">
         <input
           type="text"
           className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none transition"
           placeholder="Ask me anything..."
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
+
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
         />
         <button
           onClick={handleSend}
-<<<<<<< HEAD
+
           className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 
             text-white font-medium shadow-md hover:opacity-90 transition"
-=======
+
           className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:opacity-80 transition"
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
+
         >
           Send
         </button>
