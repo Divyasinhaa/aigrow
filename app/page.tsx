@@ -95,7 +95,7 @@ export default function Home() {
     setMessages(prev => [...prev, { role: "user", text: question }]);
 
     // AI thinking placeholder with dots
-    let thinkingMsg = { role: "ai", text: "🤔 Thinking" };
+    const thinkingMsg = { role: "ai", text: "🤔 Thinking" }; // ✅ changed let → const
     setMessages(prev => [...prev, thinkingMsg]);
 
     let dotCount = 0;
@@ -119,7 +119,8 @@ export default function Home() {
         ...prev.filter(m => m !== thinkingMsg),
         { role: "ai", text: data.answer || predefinedAnswers[question] || "🤖 I don't know the answer." },
       ]);
-    } catch (error) {
+    } catch {
+      // ✅ removed unused (error) variable
       clearInterval(interval);
       setMessages(prev => [
         ...prev.filter(m => m !== thinkingMsg),
@@ -145,25 +146,29 @@ export default function Home() {
         </button>
       </header>
 
-      
-
-{/* SUGGESTIONS */}
-<section className="p-4 space-y-3 bg-white/60 dark:bg-gray-800/70 border-b border-gray-300 dark:border-gray-700 sticky top-[68px] z-40">
-  {suggestions.map((group, idx) => (
-    <div key={idx}>
-      <h2 className="font-semibold text-sm mb-2 text-gray-800 dark:text-gray-200">
-        {group.category}
-      </h2>
-      {/* You can map over group.suggestions here */}
-    </div>
-  ))}
-</section>
-
+      {/* SUGGESTIONS */}
+      <section className="p-4 space-y-3 bg-white/60 dark:bg-gray-800/70 border-b border-gray-300 dark:border-gray-700 sticky top-[68px] z-40">
+        {suggestions.map((group, idx) => (
+          <div key={idx}>
+            <h2 className="font-semibold text-sm mb-2 text-gray-800 dark:text-gray-200">
+              {group.category}
+            </h2>
+            {/* You can map over group.questions here */}
+          </div>
+        ))}
+      </section>
 
       {/* CHAT AREA */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((msg, idx) => (
-          <div key={idx} className={`max-w-xl p-3 rounded-xl shadow-md text-sm whitespace-pre-line leading-relaxed ${msg.role === 'user' ? 'ml-auto bg-gradient-to-r from-indigo-500 to-pink-500 text-white' : 'mr-auto bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'}`}>
+          <div
+            key={idx}
+            className={`max-w-xl p-3 rounded-xl shadow-md text-sm whitespace-pre-line leading-relaxed ${
+              msg.role === 'user'
+                ? 'ml-auto bg-gradient-to-r from-indigo-500 to-pink-500 text-white'
+                : 'mr-auto bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+            }`}
+          >
             {msg.text}
           </div>
         ))}
@@ -172,8 +177,20 @@ export default function Home() {
 
       {/* INPUT BAR */}
       <div className="p-4 border-t border-gray-300 dark:border-gray-700 bg-white/70 dark:bg-gray-900/80 flex gap-2 sticky bottom-0 z-50">
-        <input type="text" className="flex-1 px-3 py-2 rounded-lg border border-gray-400 dark:border-gray-600 dark:bg-gray-800 focus:ring-2 focus:ring-pink-500 outline-none transition" placeholder="💬 Ask me anything..." value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} />
-        <button onClick={handleSend} className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium shadow-md hover:opacity-90 transition">Send</button>
+        <input
+          type="text"
+          className="flex-1 px-3 py-2 rounded-lg border border-gray-400 dark:border-gray-600 dark:bg-gray-800 focus:ring-2 focus:ring-pink-500 outline-none transition"
+          placeholder="💬 Ask me anything..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+        />
+        <button
+          onClick={handleSend}
+          className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium shadow-md hover:opacity-90 transition"
+        >
+          Send
+        </button>
       </div>
     </main>
   );
