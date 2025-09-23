@@ -145,21 +145,20 @@ export default function Home() {
         </button>
       </header>
 
-      {/* SUGGESTIONS */}
-      <section className="p-4 space-y-3 bg-white/60 dark:bg-gray-800/70 border-b border-gray-300 dark:border-gray-700  z-40">
-        {suggestions.map((group, idx) => (
-          <div key={idx}>
-            <h2 className="font-semibold text-sm mb-2 text-gray-800 dark:text-gray-200">{group.category}</h2>
-            <div className="flex flex-wrap gap-2">
-              {group.questions.map((q, i) => (
-                <button key={i} onClick={() => getAIResponse(q)} className="px-3 py-1 text-sm rounded-full bg-gradient-to-r from-indigo-400 to-pink-400 text-white shadow-md hover:scale-105 transition">
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </section>
+      
+
+{/* SUGGESTIONS */}
+<section className="p-4 space-y-3 bg-white/60 dark:bg-gray-800/70 border-b border-gray-300 dark:border-gray-700 sticky top-[68px] z-40">
+  {suggestions.map((group, idx) => (
+    <div key={idx}>
+      <h2 className="font-semibold text-sm mb-2 text-gray-800 dark:text-gray-200">
+        {group.category}
+      </h2>
+      {/* You can map over group.suggestions here */}
+    </div>
+  ))}
+</section>
+
 
       {/* CHAT AREA */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
