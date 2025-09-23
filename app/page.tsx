@@ -1,6 +1,5 @@
 "use client";
-
-import React, { useState } from "react";
+import { useState, useEffect } from "react";
 
 type Message = {
   role: "user" | "ai";
@@ -10,15 +9,19 @@ type Message = {
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSend = async () => {
     if (!input.trim()) return;
 
     // Add user message
-    setMessages((prev) => [...prev, { role: "user", text: input }]);
-    setInput("");
+    const userMsg: Message = { role: "user", text: input };
+    setMessages((prev) => [...prev, userMsg]);
 
-    // AI thinking placeholder
+    setInput("");
+    setLoading(true);
+
+    // Thinking placeholder
     const thinkingMsg: Message = { role: "ai", text: "🤔 Thinking" };
     setMessages((prev) => [...prev, thinkingMsg]);
 
@@ -26,73 +29,77 @@ export default function Home() {
     const interval = setInterval(() => {
       dotCount = (dotCount + 1) % 4;
       setMessages((prev) =>
-        prev.map((msg, i) =>
-          i === prev.length - 1
-            ? { ...msg, text: "🤔 Thinking" + ".".repeat(dotCount) }
-            : msg
+        prev.map((m, idx) =>
+          idx === prev.length - 1
+            ? { ...m, text: "🤔 Thinking" + ".".repeat(dotCount) }
+            : m
         )
       );
     }, 500);
 
     try {
-      // Mock AI response (replace with API call later)
-      const aiResponse = "This is an AI-generated response.";
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: input }),
+      });
+
+      const data = await res.json();
 
       clearInterval(interval);
 
-      // Replace "thinking" message with real response
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[updated.length - 1] = { role: "ai", text: aiResponse };
-        return updated;
-      });
-    } catch (error) {
-      clearInterval(interval);
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[updated.length - 1] = { role: "ai", text: "⚠️ Error occurred." };
-        return updated;
-      });
+      // Replace thinking with real AI response
+      setMessages((prev) => [
+        ...prev.slice(0, -1),
+        { role: "ai", text: data.reply },
+      ]);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
-      <div className="w-full max-w-2xl bg-white shadow-md rounded-lg p-4 flex flex-col h-[80vh]">
-        {/* Chat messages */}
-        <div className="flex-1 overflow-y-auto space-y-3 mb-4">
-          {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`p-3 rounded-lg w-fit max-w-[75%] ${
-                msg.role === "user"
-                  ? "bg-blue-500 text-white self-end ml-auto"
-                  : "bg-gray-200 text-black self-start mr-auto"
-              }`}
-            >
-              {msg.text}
-            </div>
-          ))}
-        </div>
+    <div className="flex flex-col h-screen bg-gradient-to-b from-gray-100 to-gray-200 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100">
+      {/* Header */}
+      <header className="p-4 bg-indigo-600 text-white font-bold text-lg shadow-md">
+        🤖 AI Grow
+      </header>
 
-        {/* Input box */}
-        <div className="flex gap-2">
+      {/* Chat Messages */}
+      <main className="flex-1 overflow-y-auto p-4 space-y-3">
+        {messages.map((msg, idx) => (
+          <div
+            key={idx}
+            className={`p-3 rounded-xl max-w-[75%] ${
+              msg.role === "user"
+                ? "ml-auto bg-indigo-500 text-white"
+                : "mr-auto bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            }`}
+          >
+            {msg.text}
+          </div>
+        ))}
+      </main>
+
+      {/* Input Bar (always visible) */}
+      <footer className="p-4 bg-white dark:bg-gray-900 border-t border-gray-300 dark:border-gray-700 sticky bottom-0">
+        <div className="flex items-center gap-2">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Type a message..."
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            placeholder="Ask me anything..."
+            className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <button
             onClick={handleSend}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
+            disabled={loading}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400"
           >
-            Send
+            {loading ? "..." : "Send"}
           </button>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }
