@@ -1,105 +1,197 @@
 "use client";
-import { useState, useEffect } from "react";
 
-type Message = {
-  role: "user" | "ai";
-  text: string;
-};
+import { useState, useRef } from "react";
+
+type Message = { role: "user" | "ai"; text: string };
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
+  const suggestions = [
+    {
+      category: "Life & Growth",
+      questions: [
+        "What are the three most important values in life?",
+        "How do I overcome fear of failure?",
+        "How can I make learning new skills faster?",
+      ],
+    },
+    {
+      category: "Technology",
+      questions: [
+        "How will AI change jobs in the next decade?",
+        "What is quantum computing in simple terms?",
+        "How does blockchain work?",
+      ],
+    },
+    {
+      category: "AI/ML Concepts",
+      questions: [
+        "What is AI?",
+        "What is ML?",
+        "What is the difference between AI and ML?",
+      ],
+    },
+    {
+      category: "Future Trends",
+      questions: [
+        "What is the future of renewable energy tech?",
+        "What’s the fastest way to learn coding?",
+        "What are the top 5 emerging technologies in 2025?",
+      ],
+    },
+  ];
 
-    // Add user message
-    const userMsg: Message = { role: "user", text: input };
-    setMessages((prev) => [...prev, userMsg]);
+  const predefinedAnswers: Record<string, string> = {
+    "What are the three most important values in life?":
+      "🌱 Many consider honesty, compassion, and perseverance as guiding values that shape a meaningful life.",
+    "How do I overcome fear of failure?":
+      "💡 View failure as feedback, not defeat. Break goals into small steps and celebrate progress.",
+    "How can I make learning new skills faster?":
+      "⚡ Use active recall, spaced repetition, and learn by teaching others.",
+    "What is AI?":
+      "Computer actions that mimic human decision making based on learned experiences and data.",
+    "What is ML?":
+      "Processes that allow computers to derive conclusions from data.",
+    "What is the difference between AI and ML?":
+      "ML is a subset of AI that enables the ability for computers to learn outside of their programming.",
+    "How will AI change jobs in the next decade?":
+      "🤖 AI will automate routine tasks, create new roles in AI ethics & engineering, and reshape industries.",
+    "What is quantum computing in simple terms?":
+      "🌀 Quantum computing uses qubits that can be 0 and 1 at the same time, enabling powerful parallel processing.",
+    "How does blockchain work?":
+      "⛓️ Blockchain is a decentralized ledger where data is stored in secure, linked blocks.",
+    "What is the future of renewable energy tech?":
+      "🌞 Expect cheaper solar, efficient wind, and breakthroughs in energy storage and fusion.",
+    "What’s the fastest way to learn coding?":
+      "💻 Build projects, practice daily, and learn by solving real-world problems.",
+    "What are the top 5 emerging technologies in 2025?":
+      "🚀 AI assistants, quantum computing, advanced biotech, green hydrogen, and immersive AR/VR.",
+  };
 
-    setInput("");
-    setLoading(true);
+  const toggleDarkMode = () => {
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    document.documentElement.classList.toggle("dark", newMode);
+    localStorage.setItem("theme", newMode ? "dark" : "light");
+  };
 
-    // Thinking placeholder
-    const thinkingMsg: Message = { role: "ai", text: "🤔 Thinking" };
+  const getAIResponse = async (question: string) => {
+    const userMessage: Message = { role: "user", text: question };
+    setMessages((prev) => [...prev, userMessage]);
+
+    // AI thinking placeholder
+    const thinkingMsg: Message = { role: "ai", text: "🤔 Thinking..." };
     setMessages((prev) => [...prev, thinkingMsg]);
 
     let dotCount = 0;
     const interval = setInterval(() => {
       dotCount = (dotCount + 1) % 4;
-      setMessages((prev) =>
-        prev.map((m, idx) =>
-          idx === prev.length - 1
-            ? { ...m, text: "🤔 Thinking" + ".".repeat(dotCount) }
-            : m
-        )
-      );
+      thinkingMsg.text = "🤔 Thinking" + ".".repeat(dotCount);
+      setMessages((prev) => [
+        ...prev.filter((m) => m !== thinkingMsg),
+        { ...thinkingMsg },
+      ]);
     }, 500);
 
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input }),
+        body: JSON.stringify({ question }),
       });
 
       const data = await res.json();
 
       clearInterval(interval);
-
-      // Replace thinking with real AI response
       setMessages((prev) => [
-        ...prev.slice(0, -1),
-        { role: "ai", text: data.reply },
+        ...prev.filter((m) => m !== thinkingMsg),
+        {
+          role: "ai",
+          text:
+            data.answer || predefinedAnswers[question] || "🤖 I don't know the answer.",
+        },
       ]);
-    } finally {
-      setLoading(false);
+    } catch {
+      clearInterval(interval);
+      setMessages((prev) => [
+        ...prev.filter((m) => m !== thinkingMsg),
+        { role: "ai", text: "⚠️ Error: could not connect to backend." },
+      ]);
     }
   };
 
+  const handleSend = () => {
+    if (!input.trim()) return;
+    getAIResponse(input.trim());
+    setInput("");
+  };
+
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-b from-gray-100 to-gray-200 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100">
-      {/* Header */}
-      <header className="p-4 bg-indigo-600 text-white font-bold text-lg shadow-md">
-        🤖 AI Grow
+    <main className="min-h-screen flex flex-col bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 dark:from-gray-950 dark:via-gray-900 dark:to-black text-gray-900 dark:text-gray-100 transition-colors duration-500 font-sans">
+      {/* HEADER */}
+      <header className="flex justify-between items-center p-4 bg-gradient-to-r from-indigo-500 to-purple-600 dark:from-gray-800 dark:to-gray-900 text-white shadow-lg sticky top-0 z-50">
+        <h1 className="text-2xl font-extrabold tracking-wide">
+          🌸 AI GROW
+          <br />
+          <span className="text-sm">Interactive Chatbot</span>
+        </h1>
+        <button
+          onClick={toggleDarkMode}
+          className="px-3 py-1 rounded-lg bg-white/20 text-white shadow hover:bg-white/30 transition"
+        >
+          {darkMode ? "☀️ Light" : "🌙 Dark"}
+        </button>
       </header>
 
-      {/* Chat Messages */}
-      <main className="flex-1 overflow-y-auto p-4 space-y-3">
+      {/* SUGGESTIONS */}
+      <section className="p-4 space-y-3 bg-white/60 dark:bg-gray-800/70 border-b border-gray-300 dark:border-gray-700 sticky top-[68px] z-40">
+        {suggestions.map((group, idx) => (
+          <div key={idx}>
+            <h2 className="font-semibold text-sm mb-2 text-gray-800 dark:text-gray-200">
+              {group.category}
+            </h2>
+          </div>
+        ))}
+      </section>
+
+      {/* CHAT AREA */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((msg, idx) => (
           <div
             key={idx}
-            className={`p-3 rounded-xl max-w-[75%] ${
+            className={`max-w-xl p-3 rounded-xl shadow-md text-sm whitespace-pre-line leading-relaxed ${
               msg.role === "user"
-                ? "ml-auto bg-indigo-500 text-white"
-                : "mr-auto bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                ? "ml-auto bg-gradient-to-r from-indigo-500 to-pink-500 text-white"
+                : "mr-auto bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             }`}
           >
             {msg.text}
           </div>
         ))}
-      </main>
+        <div ref={chatEndRef} />
+      </div>
 
-      {/* Input Bar (always visible) */}
-      <footer className="p-4 bg-white dark:bg-gray-900 border-t border-gray-300 dark:border-gray-700 sticky bottom-0">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask me anything..."
-            className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <button
-            onClick={handleSend}
-            disabled={loading}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400"
-          >
-            {loading ? "..." : "Send"}
-          </button>
-        </div>
-      </footer>
-    </div>
+      {/* INPUT BAR */}
+      <div className="p-4 border-t border-gray-300 dark:border-gray-700 bg-white/70 dark:bg-gray-900/80 flex gap-2 sticky bottom-0 z-50">
+        <input
+          type="text"
+          className="flex-1 px-3 py-2 rounded-lg border border-gray-400 dark:border-gray-600 dark:bg-gray-800 focus:ring-2 focus:ring-pink-500 outline-none transition"
+          placeholder="💬 Ask me anything..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSend()}
+        />
+        <button
+          onClick={handleSend}
+          className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium shadow-md hover:opacity-90 transition"
+        >
+          Send
+        </button>
+      </div>
+    </main>
   );
 }
