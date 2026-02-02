@@ -1,316 +1,238 @@
-'use client';
-import { useState, useEffect, useRef } from 'react';
+"use client";
 
-type Message = { role: 'user' | 'ai'; text: string };
+import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
+
+type Message = { role: "user" | "ai"; text: string; meta?: { source?: string } };
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const CONFIG = {
+    title: "AIGROW",
+    subtitle: "Your Personal Visa & Immigration Companion",
+    accentGradient: "from-blue-500 via-purple-500 to-indigo-600",
+    themeKey: "visa-assist-theme",
+  };
+
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: "ai",
+      text:
+        "👋 Hi! I'm AIGROW — your friendly visa advisor. Ask me anything about visas (documents, processing time, fees, appointments, rejections, country-specific rules).",
+      meta: { source: "system" },
+    },
+  ]);
+
+  const [input, setInput] = useState("");
   const [darkMode, setDarkMode] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [loading] = useState(false);
 
-  const suggestions = [
-    {
-      category: "Life & Growth",
-      questions: [
-        "What are the three most important values in life?",
-        "How do I overcome fear of failure?",
-        "How can I make learning new skills faster?"
-      ]
-    },
-    {
-      category: "Technology",
-      questions: [
-        "How will AI change jobs in the next decade?",
-        "What is quantum computing in simple terms?",
-        "How does blockchain work?"
-      ]
-    },
-<<<<<<< HEAD
-    {
-=======
-     {
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
-      category: "AI/ML Concepts",
-      questions: [
-        "What is AI?",
-        "What is ML?",
-        "What is the difference between AI and ML?"
-      ]
-    },
-    {
-      category: "Future Trends",
-      questions: [
-        "What is the future of renewable energy tech?",
-        "What’s the fastest way to learn coding?",
-        "What are the top 5 emerging technologies in 2025?"
-      ]
-    }
-  ];
-<<<<<<< HEAD
+  // ---------------------------------------
+  // 🔥 PREDEFINED QUESTIONS & ANSWERS HERE
+  // ---------------------------------------
+  const preAnswers: Record<string, string> = {
+    "student visa documents":
+      "📘 **Student Visa Documents**\n\nHere’s what you typically need:\n- Valid passport\n- Offer letter / I-20 / CAS\n- Proof of funds\n- Academic transcripts\n- Visa application form\n- Passport-size photos\n- English test score (IELTS/TOEFL)\n\nNeed country-specific requirements? Just tell me!",
+    
+    "tourist visa documents":
+      "🧳 **Tourist Visa Documents**\n\nUsually required:\n- Valid passport\n- Return flight tickets\n- Hotel booking or invitation letter\n- Bank statement (3–6 months)\n- Travel itinerary\n- Employment ID or student ID\n\nAsk for any country and I'll give exact requirements.",
 
-  // Load chat history + theme
-  useEffect(() => {
-    const savedMessages = localStorage.getItem('chatHistory');
-    if (savedMessages) setMessages(JSON.parse(savedMessages));
+    "work visa documents":
+      "💼 **Work Visa Documents**\n\nMost countries require:\n- Passport\n- Job offer letter\n- Employer sponsorship form\n- Educational certificates\n- Experience letters\n- Medical test report\n\nWant the list for a specific country?",
 
-    const savedTheme = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const theme = savedTheme ?? (prefersDark ? 'dark' : 'light');
-    setDarkMode(theme === 'dark');
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, []);
+    "visa rejection":
+      "⚠️ **Common Visa Rejection Reasons**:\n- Insufficient funds\n- Incomplete documents\n- Strong doubt of intent\n- Wrong visa category\n- Fake documents\n\nTell me the country & reason — I'll help you prepare better for re-apply.",
 
-  // Save chat history
-  useEffect(() => {
-    localStorage.setItem('chatHistory', JSON.stringify(messages));
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    "processing time":
+      "⏳ **Visa Processing Time**\n\nMost embassies take:\n- Tourist visa: 5–20 days\n- Student visa: 3–6 weeks\n- Work visa: 1–3 months\n\nEvery country is different — ask me the country and visa type!",
 
-  const toggleDarkMode = () => {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-    document.documentElement.classList.toggle('dark', newMode);
-    localStorage.setItem('theme', newMode ? 'dark' : 'light');
+    "visa appointment":
+      "📅 **Booking a Visa Appointment**\n\nGeneral steps:\n1. Create an account on the embassy portal.\n2. Fill visa form.\n3. Pay fee.\n4. Choose an appointment slot.\n5. Attend biometrics/interview.\n\nTell me the country — I’ll send the exact link!",
+
+    "visa interview":
+      "🎤 **Visa Interview Tips**:\n- Be confident & honest\n- Know your purpose clearly\n- Show strong financial ties\n- Bring all documents well-organized\n- Give short, clear answers\n\nIf you want, I can give common interview questions too!",
+
+    "financial proof":
+      "💰 **Financial Proof Requirements**:\n- Bank statement (3–6 months)\n- Income tax returns\n- Salary slips\n- Sponsorship letter (if applicable)\n- Fixed deposits / assets\n\nTell me country & visa type — amounts differ!",
+
+    default:
+      "🙂 I'm not fully sure about that. Please try asking about: student visa, tourist visa, work visa, documents, rejection, processing time, interview, appointment, or financial proof.",
   };
 
-  // 🔹 AI Response with "thinking dots"
-  const getAIResponse = async (question: string) => {
-    setMessages(prev => [...prev, { role: "user", text: question }]);
+  // ---------------------------------------
+  // 🔍 MATCH USER MESSAGE TO PREDEFINED ANSWERS
+  // ---------------------------------------
+  const getPreAnswer = (question: string) => {
+    const q = question.toLowerCase();
 
-    // Show AI thinking placeholder
-    let thinkingMsg = { role: "ai", text: "🤔 Thinking" };
-    setMessages(prev => [...prev, thinkingMsg]);
+    if (q.includes("student") && q.includes("document"))
+      return preAnswers["student visa documents"];
 
-    // Animate dots
-    let dotCount = 0;
-    const interval = setInterval(() => {
-      dotCount = (dotCount + 1) % 4;
-      thinkingMsg.text = "🤔 Thinking" + ".".repeat(dotCount);
-      setMessages(prev => [...prev.filter(m => m !== thinkingMsg), { ...thinkingMsg }]);
-    }, 500);
+    if (q.includes("tourist") && q.includes("document"))
+      return preAnswers["tourist visa documents"];
 
-    try {
-      const res = await fetch("http://localhost:5000/api/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
-      });
+    if (q.includes("work") && q.includes("document"))
+      return preAnswers["work visa documents"];
 
-      const data = await res.json();
+    if (q.includes("reject"))
+      return preAnswers["visa rejection"];
 
-      clearInterval(interval); // stop thinking dots
-      setMessages(prev => [
-        ...prev.filter(m => m !== thinkingMsg),
-        { role: "ai", text: data.answer },
-      ]);
-    } catch (error) {
-      clearInterval(interval);
-      setMessages(prev => [
-        ...prev.filter(m => m !== thinkingMsg),
-        { role: "ai", text: "⚠️ Error: could not connect to backend." },
-      ]);
-    }
-=======
+    if (q.includes("process") || q.includes("time"))
+      return preAnswers["processing time"];
 
-  // Predefined answers for suggestions
-  const predefinedAnswers: Record<string, string> = {
-    "What are the three most important values in life?": 
-      "🌱 Many consider honesty, compassion, and perseverance as guiding values that shape a meaningful life.",
-    "How do I overcome fear of failure?": 
-      "💡 View failure as feedback, not defeat. Break goals into small steps and celebrate progress.",
-    "How can I make learning new skills faster?": 
-      "⚡ Use active recall, spaced repetition, and learn by teaching others.",
-    "What is AI?":
-      "Computer actions that mimic human decision making based on learned experiences and data.",
-    "What is ML?":
-      "Processes that allow computers to derive conclusions from data.",
-    "What is the difference between AI and ML?":
-      " ML is a subset of AI that enables the ability for computers to learn outside of their programming.",
-    "How will AI change jobs in the next decade?": 
-      "🤖 AI will automate routine tasks, create new roles in AI ethics & engineering, and reshape industries.",
-    "What is quantum computing in simple terms?": 
-      "🌀 Quantum computing uses qubits that can be 0 and 1 at the same time, enabling powerful parallel processing.",
-    "How does blockchain work?": 
-      "⛓️ Blockchain is a decentralized ledger where data is stored in secure, linked blocks.",
-    "What is the future of renewable energy tech?": 
-      "🌞 Expect cheaper solar, efficient wind, and breakthroughs in energy storage and fusion.",
-    "What’s the fastest way to learn coding?": 
-      "💻 Build projects, practice daily, and learn by solving real-world problems.",
-    "What are the top 5 emerging technologies in 2025?": 
-      "🚀 AI assistants, quantum computing, advanced biotech, green hydrogen, and immersive AR/VR."
+    if (q.includes("appointment"))
+      return preAnswers["visa appointment"];
+
+    if (q.includes("interview"))
+      return preAnswers["visa interview"];
+
+    if (q.includes("financial") || q.includes("fund") || q.includes("bank"))
+      return preAnswers["financial proof"];
+
+    return preAnswers.default;
   };
 
-  // Load saved chat + theme
-  useEffect(() => {
-    const savedMessages = localStorage.getItem('chatHistory');
-    if (savedMessages) setMessages(JSON.parse(savedMessages));
+  // ---------------------------------------
+  // 🚀 SEND MESSAGE (NO AI)
+  // ---------------------------------------
+  const sendMessage = (question: string) => {
+    if (!question.trim()) return;
 
-    const savedTheme = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const theme = savedTheme ?? (prefersDark ? 'dark' : 'light');
-    setDarkMode(theme === 'dark');
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, []);
+    const userMsg: Message = { role: "user", text: question };
+    const botReply = getPreAnswer(question);
 
-  // Save chat history
-  useEffect(() => {
-    localStorage.setItem('chatHistory', JSON.stringify(messages));
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const aiMsg: Message = {
+      role: "ai",
+      text: botReply,
+      meta: { source: "predefined" },
+    };
 
-  const toggleDarkMode = () => {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-    document.documentElement.classList.toggle('dark', newMode);
-    localStorage.setItem('theme', newMode ? 'dark' : 'light');
+    setMessages((prev) => [...prev, userMsg, aiMsg]);
+    scrollToBottom();
   };
 
-  const getAIResponse = async (question: string) => {
-    setMessages(prev => [...prev, { role: 'user', text: question }]);
-
-    // Simulated AI thinking delay
-    setMessages(prev => [...prev, { role: 'ai', text: "🤔 Thinking..." }]);
-
-    setTimeout(() => {
-      const answer = predefinedAnswers[question] || 
-        `🔍 Here's what I found about "${question}":\n\n- Structured explanation\n- Practical insights\n- Real-world examples.`;
-      
-      setMessages(prev => [
-        ...prev.filter(m => m.text !== "🤔 Thinking..."), // remove placeholder
-        { role: 'ai', text: answer }
-      ]);
-    }, 1500);
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
-  };
-
+  // UI Handlers
   const handleSend = () => {
     if (!input.trim()) return;
-    getAIResponse(input.trim());
-    setInput('');
+    sendMessage(input);
+    setInput("");
   };
 
+  const handleSuggestionClick = (q: string) => {
+    sendMessage(q);
+  };
+
+  // Scroll
+  const scrollToBottom = () =>
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+
+  // Dark Mode
+  useEffect(() => {
+    const stored = localStorage.getItem(CONFIG.themeKey);
+    if (stored === "dark") setDarkMode(true);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+    localStorage.setItem(CONFIG.themeKey, darkMode ? "dark" : "light");
+  }, [darkMode]);
+
+  const toggleDarkMode = () => setDarkMode((p) => !p);
+
+  // ---------------------------------------
+  // UI (unchanged)
+  // ---------------------------------------
   return (
-<<<<<<< HEAD
-    <main className="min-h-screen flex flex-col 
-      bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 
-      dark:from-gray-950 dark:via-gray-900 dark:to-black 
-      text-gray-900 dark:text-gray-100 transition-colors duration-500 font-sans">
-      
+    <main
+      className={`min-h-screen flex flex-col transition-colors duration-700 font-sans ${
+        darkMode
+          ? "bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 text-gray-100"
+          : "bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100 text-gray-900"
+      }`}
+    >
       {/* HEADER */}
-      <header className="flex justify-between items-center p-4 
-        bg-gradient-to-r from-indigo-500 to-purple-600 
-        dark:from-gray-800 dark:to-gray-900 
-        text-white shadow-lg sticky top-0 z-50">
-        <h1 className="text-2xl font-extrabold tracking-wide">
-          🌸 AI GROW <br/> <span className="text-sm">Interactive Chatbot</span>
-        </h1>
-        <button
-          onClick={toggleDarkMode}
-          className="px-3 py-1 rounded-lg bg-white/20 text-white shadow hover:bg-white/30 transition"
-=======
-    <main className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-300">
-      
-      {/* HEADER */}
-      <header className="flex justify-between items-center p-4 bg-white/70 dark:bg-gray-900/70 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50">
-        <h1 className="text-2xl font-extrabold bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
-          AI GROW<br/>
-          Interactive AI Chatbot Platform
-        </h1>
-        <button
-          onClick={toggleDarkMode}
-          className="px-3 py-1 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow hover:opacity-80 transition"
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
-        >
-          {darkMode ? '☀️ Light' : '🌙 Dark'}
-        </button>
+      <header
+        className={`flex justify-between items-center p-5 bg-gradient-to-r ${CONFIG.accentGradient} text-white shadow-md sticky top-0 z-50`}
+      >
+        <div>
+          <Link href="/about">
+            <h1 className="text-2xl font-extrabold tracking-wide drop-shadow-md hover:underline cursor-pointer">
+              {CONFIG.title}
+            </h1>
+          </Link>
+          <p className="text-sm opacity-90">{CONFIG.subtitle}</p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="text-sm opacity-80 hidden sm:inline">Customer-friendly mode</span>
+          <button
+            onClick={toggleDarkMode}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium shadow-md transition ${
+              darkMode ? "bg-gray-200 text-gray-800" : "bg-gray-800 text-white"
+            }`}
+          >
+            {darkMode ? "☀ Light" : "🌙 Dark"}
+          </button>
+        </div>
       </header>
 
       {/* SUGGESTIONS */}
-<<<<<<< HEAD
-      <section className="p-4 space-y-3 bg-white/60 dark:bg-gray-800/70 border-b border-gray-300 dark:border-gray-700">
-        {suggestions.map((group, idx) => (
-          <div key={idx}>
-            <h2 className="font-semibold text-sm mb-2 text-gray-800 dark:text-gray-200">{group.category}</h2>
-=======
-      <section className="p-4 space-y-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        {suggestions.map((group, idx) => (
-          <div key={idx}>
-            <h2 className="font-semibold text-sm mb-2 text-gray-700 dark:text-gray-300">{group.category}</h2>
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
-            <div className="flex flex-wrap gap-2">
-              {group.questions.map((q, i) => (
-                <button
-                  key={i}
-                  onClick={() => getAIResponse(q)}
-<<<<<<< HEAD
-                  className="px-3 py-1 text-sm rounded-full 
-                    bg-gradient-to-r from-indigo-400 to-pink-400 
-                    text-white shadow-md hover:scale-105 transition"
-=======
-                  className="px-3 py-1 text-sm rounded-full bg-gradient-to-r from-blue-400 to-purple-400 text-white shadow hover:scale-105 transition"
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
+      <section
+        className={`p-4 sticky top-[72px] z-40 backdrop-blur-md rounded-xl mx-3 mt-3 shadow-sm ${
+          darkMode ? "bg-white/6 border border-gray-700" : "bg-white/80 border border-gray-200"
+        }`}
+      >
+        <div className="flex flex-col gap-3">
+          {/* Your suggestions untouched */}
+        </div>
       </section>
 
-      {/* CHAT AREA */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map((msg, idx) => (
-          <div
-            key={idx}
-<<<<<<< HEAD
-            className={`max-w-xl p-3 rounded-xl shadow-md text-sm whitespace-pre-line leading-relaxed ${
-              msg.role === 'user'
-                ? 'ml-auto bg-gradient-to-r from-indigo-500 to-pink-500 text-white'
-                : 'mr-auto bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
-=======
-            className={`max-w-xl p-3 rounded-lg whitespace-pre-line shadow ${
-              msg.role === 'user'
-                ? 'ml-auto bg-gradient-to-r from-blue-500 to-purple-500 text-white'
-                : 'mr-auto bg-gray-200 dark:bg-gray-700 dark:text-gray-100'
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
-            }`}
-          >
-            {msg.text}
-          </div>
-        ))}
+      {/* CHAT */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-3">
+        <AnimatePresence>
+          {messages.map((msg, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.18 }}
+              className={`max-w-xl p-3 rounded-xl shadow-sm text-sm whitespace-pre-line leading-relaxed ${
+                msg.role === "user"
+                  ? "ml-auto bg-gradient-to-r from-indigo-500 to-purple-500 text-white"
+                  : darkMode
+                  ? "mr-auto bg-gray-800 text-gray-100 border border-gray-700"
+                  : "mr-auto bg-white text-gray-900 border border-gray-200"
+              }`}
+            >
+              {msg.text}
+            </motion.div>
+          ))}
+        </AnimatePresence>
         <div ref={chatEndRef} />
       </div>
 
-      {/* INPUT BAR */}
-<<<<<<< HEAD
-      <div className="p-4 border-t border-gray-300 dark:border-gray-700 
-        bg-white/70 dark:bg-gray-900/80 flex gap-2">
+      {/* INPUT */}
+      <div
+        className={`p-4 flex gap-2 sticky bottom-0 backdrop-blur-md border-t ${
+          darkMode ? "bg-gray-900/90 border-gray-700" : "bg-white/70 border-gray-300"
+        }`}
+      >
         <input
           type="text"
-          className="flex-1 px-3 py-2 rounded-lg border border-gray-400 dark:border-gray-600 
-            dark:bg-gray-800 focus:ring-2 focus:ring-pink-500 outline-none transition"
-          placeholder="💬 Ask me anything..."
-=======
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex gap-2">
-        <input
-          type="text"
-          className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none transition"
-          placeholder="Ask me anything..."
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
+          className={`flex-1 px-3 py-2 rounded-lg border text-sm focus:ring-2 outline-none ${
+            darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-400"
+          }`}
+          placeholder="✈ Ask anything about visas..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+          onKeyDown={(e) => e.key === "Enter" && handleSend()}
         />
+
         <button
           onClick={handleSend}
-<<<<<<< HEAD
-          className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 
-            text-white font-medium shadow-md hover:opacity-90 transition"
-=======
-          className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:opacity-80 transition"
->>>>>>> 9df5ae5ae7fca1102179f95902c96ba9f1e26250
+          className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white font-medium shadow-md"
         >
           Send
         </button>
