@@ -90,6 +90,7 @@ export default function Home() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+
   const toggleDarkMode = () => {
     const newMode = !darkMode;
     setDarkMode(newMode);
@@ -132,7 +133,6 @@ export default function Home() {
           {darkMode ? '☀️ Light' : '🌙 Dark'}
         </button>
       </header>
-
       <section className="p-4 space-y-3 bg-white dark:bg-gray-800 border-b">
         {suggestions.map((group, idx) => (
           <div key={idx}>

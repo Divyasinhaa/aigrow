@@ -1,14 +1,18 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
-type Message = { 
-  role: 'user' | 'ai'; 
+// ─── TYPES ───────────────────────────────────────────────────────────────────
+
+type Message = {
+  role: 'user' | 'ai';
   text: string;
   timestamp: Date;
   id: string;
   category?: string;
-  sentiment?: 'positive' | 'neutral' | 'curious';
+  isTyping?: boolean;
+  tokens?: number;
+  reaction?: '👍' | '💡' | '🔥' | '📌';
 };
 
 type UserProfile = {
@@ -18,764 +22,1213 @@ type UserProfile = {
   skillLevel: 'beginner' | 'intermediate' | 'advanced';
   streak: number;
   totalChats: number;
-  favoriteTopics: string[];
+  xp: number;
+  level: number;
+  achievements: string[];
+  lastVisit: string;
 };
 
-export default function Home() {
+type LearningPath = {
+  category: string;
+  icon: string;
+  color: string;
+  accent: string;
+  questions: string[];
+  description: string;
+};
+
+type Tab = 'chat' | 'paths' | 'progress' | 'settings';
+
+// ─── XP + LEVELING ────────────────────────────────────────────────────────────
+
+const XP_PER_CHAT = 15;
+const LEVEL_THRESHOLDS = [0, 50, 150, 300, 500, 750, 1100, 1500, 2100, 3000];
+const LEVEL_NAMES = ['Seedling', 'Sprout', 'Learner', 'Explorer', 'Thinker',
+  'Strategist', 'Visionary', 'Expert', 'Master', 'Legend'];
+
+function getLevelInfo(xp: number) {
+  let level = 0;
+  for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (xp >= LEVEL_THRESHOLDS[i]) { level = i; break; }
+  }
+  const next = LEVEL_THRESHOLDS[level + 1] ?? LEVEL_THRESHOLDS[level];
+  const curr = LEVEL_THRESHOLDS[level];
+  const progress = next > curr ? Math.round(((xp - curr) / (next - curr)) * 100) : 100;
+  return { level, name: LEVEL_NAMES[level], progress, xpToNext: next - xp };
+}
+
+// ─── ACHIEVEMENT DEFINITIONS ─────────────────────────────────────────────────
+
+const ACHIEVEMENTS = [
+  { id: 'first_chat', label: '🎉 First Question', desc: 'Asked your first question', trigger: (p: UserProfile) => p.totalChats >= 1 },
+  { id: 'streak_3', label: '🔥 On Fire', desc: '3-day learning streak', trigger: (p: UserProfile) => p.streak >= 3 },
+  { id: 'streak_7', label: '⚡ Week Warrior', desc: '7-day learning streak', trigger: (p: UserProfile) => p.streak >= 7 },
+  { id: 'chats_10', label: '💬 Curious Mind', desc: '10 conversations', trigger: (p: UserProfile) => p.totalChats >= 10 },
+  { id: 'chats_25', label: '🚀 Power Learner', desc: '25 conversations', trigger: (p: UserProfile) => p.totalChats >= 25 },
+  { id: 'level_3', label: '🌟 Explorer', desc: 'Reached Level 3', trigger: (p: UserProfile) => p.xp >= LEVEL_THRESHOLDS[3] },
+  { id: 'level_5', label: '🎯 Strategist', desc: 'Reached Level 5', trigger: (p: UserProfile) => p.xp >= LEVEL_THRESHOLDS[5] },
+];
+
+// ─── LEARNING PATHS ───────────────────────────────────────────────────────────
+
+const learningPaths: LearningPath[] = [
+  {
+    category: 'Career Growth',
+    icon: '📈',
+    color: 'from-emerald-600 to-teal-700',
+    accent: '#10b981',
+    description: 'Navigate career transitions, salary negotiations, and professional development.',
+    questions: [
+      'How do I transition to a tech career?',
+      'What skills are most valuable in 2025?',
+      'How to negotiate a better salary?',
+      'Building a personal brand strategy',
+      'How to get promoted faster?',
+      'How to find a mentor?',
+      'How to switch industries without starting over?',
+      'How to stand out in job applications?',
+    ],
+  },
+  {
+    category: 'Mental Models',
+    icon: '💭',
+    color: 'from-violet-600 to-purple-700',
+    accent: '#8b5cf6',
+    description: 'Upgrade your thinking with frameworks used by top performers worldwide.',
+    questions: [
+      'What is first principles thinking?',
+      'How to make better decisions under pressure?',
+      'Understanding cognitive biases',
+      'Systems thinking explained',
+      'How to think more creatively?',
+      'How to develop better judgment?',
+      'How to learn anything faster?',
+      'How does compounding work in life?',
+    ],
+  },
+  {
+    category: 'Startup & Innovation',
+    icon: '🚀',
+    color: 'from-orange-600 to-red-700',
+    accent: '#f97316',
+    description: 'Build, validate, and scale ideas that solve real problems.',
+    questions: [
+      'How to validate a startup idea?',
+      'What makes a great MVP?',
+      'Finding product-market fit',
+      'Fundraising strategies for beginners',
+      'How to price your product?',
+      'How to build a startup team?',
+      'What is the lean startup method?',
+      'How to find your first customers?',
+    ],
+  },
+  {
+    category: 'Productivity',
+    icon: '⚡',
+    color: 'from-blue-600 to-cyan-700',
+    accent: '#3b82f6',
+    description: 'Reclaim your time and energy with proven systems that stick.',
+    questions: [
+      'The Pomodoro Technique explained',
+      'How to build a second brain?',
+      'Deep work vs shallow work',
+      'Time blocking for maximum output',
+      'How to eliminate distractions?',
+      'How to prioritize when everything feels urgent?',
+      'How to stop procrastinating?',
+      'How to have more energy throughout the day?',
+    ],
+  },
+  {
+    category: 'AI & Future Tech',
+    icon: '🤖',
+    color: 'from-indigo-600 to-blue-700',
+    accent: '#6366f1',
+    description: 'Stay ahead of the AI revolution and future-proof your skills.',
+    questions: [
+      'How will AI agents change work?',
+      'Understanding GPT and LLMs',
+      'Quantum computing for beginners',
+      'The future of human-AI collaboration',
+      'How to use AI to learn faster?',
+      'What is prompt engineering?',
+      'How to stay relevant as AI advances?',
+      'How does machine learning actually work?',
+    ],
+  },
+  {
+    category: 'Personal Growth',
+    icon: '🌱',
+    color: 'from-rose-600 to-pink-700',
+    accent: '#f43f5e',
+    description: 'Build the mindset, habits, and confidence to become your best self.',
+    questions: [
+      'Building unshakeable confidence',
+      'The science of habit formation',
+      'Overcoming imposter syndrome',
+      'Emotional intelligence mastery',
+      'How to set and achieve big goals?',
+      'How to handle failure and rejection?',
+      'How to build better relationships?',
+      'How to find your life purpose?',
+    ],
+  },
+];
+
+// ─── ANSWER DATABASE ──────────────────────────────────────────────────────────
+
+const predefinedAnswers: Record<string, Record<string, string>> = {
+  'How do I transition to a tech career?': {
+    practical: `🚀 TECH CAREER SWITCH — 12-MONTH ROADMAP
+
+━━ MONTH 1-2: LAY THE FOUNDATION ━━
+✓ Create a GitHub account TODAY — this is your new resume
+✓ Pick ONE stack: Frontend (HTML/CSS/JS → React) or Data (Python + SQL) or Cloud
+✓ Build your first tiny project this week — a calculator, a to-do app, anything
+✓ Join 2-3 Discord communities in your chosen field (search "[tech] community Discord")
+
+━━ MONTH 3-5: BUILD REAL SKILLS ━━
+✓ Complete one focused course (freeCodeCamp for web, Kaggle for data — both FREE)
+✓ Build 3 portfolio projects you can actually demo — deploy them publicly
+✓ Contribute to open source — search "good first issue" on GitHub
+✓ Start sharing your learning journey on LinkedIn (even early posts build credibility)
+
+━━ MONTH 6-9: JOB-READY MODE ━━
+✓ Apply to junior roles AND internships simultaneously
+✓ Solve 50+ LeetCode problems if targeting developer positions
+✓ Get 2+ mock interviews per week via Pramp or interviewing.io
+✓ Cold outreach to 5 people at target companies each week — coffee chat, not job ask
+
+━━ MONTH 10-12: LAND THE ROLE ━━
+✓ Send 5-10 tailored applications per week (quality over quantity)
+✓ Mirror keywords from each job description in your resume
+✓ Network at local tech meetups — most cities have free Meetup.com events
+✓ Aim for 2 full interviews per month — each one teaches you something
+
+⚡ REAL BENCHMARK: Sarah went from accountant → frontend developer in 8 months coding 2hrs/day + weekend bootcamp. Background does NOT matter. Consistency does.`,
+    conversational: `Hey — wanting to break into tech is one of the best moves you can make right now. Let me be real with you about what actually works.
+
+First: you absolutely do not need a computer science degree. The industry genuinely does not care where you studied — it cares what you can build. I know teachers, nurses, lawyers, and a former chef who became successful developers. What they all had in common was consistency, not credentials.
+
+Here is the framework that works:
+
+Pick your lane before you start coding. Web development, data science, product management, cloud engineering, UX design — each has a different path. Spend ONE week exploring each before committing months to the wrong one.
+
+Build things, do not just watch tutorials. This is the trap everyone falls into. Tutorial hell is real — you watch hours of content and feel productive, but when you close the laptop you cannot build anything. The fix: every tutorial you follow, build something DIFFERENT right after using the same concepts.
+
+Show your work publicly from day one. A GitHub profile, some LinkedIn posts about what you are learning, even rough projects on the internet — these create social proof that no resume can replicate. People hire humans they have watched growing.
+
+Talk to 5 real people in tech. Reach out on LinkedIn to people doing the role you want. Ask genuine, specific questions about their path. Most will reply if you are thoughtful and brief. These conversations can unlock opportunities you cannot find through job boards alone.
+
+The uncomfortable truth: one focused hour daily for 6 months beats frantic weekend sprints every single time. The tech career switch is a marathon, not a sprint.
+
+What is your current background? Tell me and I can make this much more specific for you.`
+  },
+  'What is first principles thinking?': {
+    practical: `⚡ FIRST PRINCIPLES — HOW TO USE IT TODAY
+
+THE 3-STEP PROCESS:
+
+STEP 1 — State the problem precisely:
+Write down EXACTLY what you are trying to solve.
+Example: "I cannot afford a gym membership but want to get fit."
+
+STEP 2 — Break every assumption:
+Ask "Why?" and "Is this actually true?" for each assumption.
+• "Do I need a gym?" → Fitness = strength + cardio + flexibility
+• "What provides each?" → Bodyweight (free), running (free), YouTube yoga (free)  
+• "What is a gym providing?" → Equipment, space, routine — all replicable
+
+STEP 3 — Build from confirmed truths only:
+Reconstruct the solution using only what you verified is true.
+New solution: Home workout + outdoor running + free online classes = $0.
+
+━━ TRY IT ON YOUR CURRENT BIGGEST CHALLENGE ━━
+① Write the problem
+② List every assumption baked into it
+③ Ask "Is this true, or just tradition/convention?"
+④ Design a new solution from scratch using only confirmed truths
+
+CLASSIC EXAMPLES:
+→ Elon Musk: "Rockets cost $65M" → broke it down to materials → built SpaceX
+→ Airbnb founders: "Hotels are expensive" → "What IS hospitality?" → rented air mattresses
+→ Netflix: "People go to video stores" → "What do they actually want?" → convenience`,
+    conversational: `First principles thinking is one of those ideas that sounds intimidating until someone shows you the LEGO analogy — then it clicks forever.
+
+Imagine you are building with LEGO. Most people look at the box and try to copy the picture. That is reasoning by analogy — doing what has always been done. First principles thinking means dumping all the bricks on the floor and asking: "Given ONLY these pieces, what is the BEST thing I can actually build?"
+
+The real-world story that makes this click:
+
+Elon Musk wanted to buy a rocket for SpaceX. Everyone told him rockets cost $65 million each. He refused to just accept that. He asked: "What IS a rocket? What is it actually made of?"
+
+Aerospace aluminum, titanium, copper, carbon fiber, and rocket fuel. He looked up the raw material costs. They were about 2% of the price of a finished rocket.
+
+So he bought the materials and built his own rockets. SpaceX now launches at a fraction of what NASA paid. He did not invent anything new — he just refused to accept the inherited assumption that rockets had to cost that much.
+
+The question that changes everything: "Is this true because it IS true — or because nobody has questioned it yet?"
+
+How to start right now: pick the biggest constraint in your current situation. Ask "Is this constraint actually fixed, or does it just seem fixed because we inherited it?" Often the answer is the second one.
+
+Give me a real situation you are facing and I will walk you through the first principles breakdown with you.`
+  },
+  'The science of habit formation': {
+    practical: `🧬 BUILD A HABIT THAT ACTUALLY STICKS
+
+THE COREFORMULA:
+[OBVIOUS CUE] → [TINY ROUTINE] → [SATISFYING REWARD]
+
+━━ STEP 1: DESIGN YOUR CUE ━━
+✓ Habit stack: "After I [existing automatic habit], I will [new habit]"
+   Example: "After I pour morning coffee → meditate 2 minutes"
+✓ Make it physical: book on your pillow = read before bed
+✓ Time + location anchor: "Every day at 7am in my kitchen"
+
+━━ STEP 2: MAKE IT TINY (Most people fail here) ━━
+✓ Exercise habit? Start with: "I will put on my gym clothes"
+✓ Reading habit? Start with: "I will read one page"
+✓ Journaling habit? Start with: "I will write one sentence"
+The goal in Week 1 is SHOWING UP, not performance.
+
+━━ STEP 3: REWARD IMMEDIATELY ━━
+✓ Visual tracking: X on a calendar — "don't break the chain" is powerful
+✓ Micro-celebration: genuine fist pump or verbal "yes!" — trains your dopamine system
+✓ Temptation bundling: "I only listen to my favorite podcast while running"
+
+━━ BREAKING BAD HABITS (reverse the formula) ━━
+✓ Make the cue invisible — remove the trigger entirely from your environment
+✓ Add friction — 5 extra steps between you and the bad behavior
+✓ Replace the reward — find a healthier substitute for the same craving
+
+THE GOLDEN RULE: Never miss twice in a row.
+Miss once = a slip (normal). Miss twice = beginning of a new (opposite) habit.`,
+    conversational: `Habits are genuinely fascinating once you understand what is actually happening in your brain — and once you see the mechanism, building new ones becomes much more deliberate.
+
+Here is what is really going on: every time you repeat a behavior, your brain is literally rewiring itself. It builds thicker, faster neural pathways for that behavior. The more you repeat it, the more automatic it becomes, until it requires almost no conscious thought at all — like brushing your teeth.
+
+The mechanism is a loop: cue → craving → response → reward. Your brain runs this loop millions of times until the loop itself becomes automatic. The trick is to design the loop consciously.
+
+The biggest mistake: starting too big. "I will exercise for an hour every morning" fails after four days because the cost is too high when motivation inevitably dips. "I will put on my gym shoes every morning" almost always succeeds — and most days you end up going to the gym because you are already in the shoes.
+
+The goal in the early days is not performance. The goal is SHOWING UP. Showing up is what reinforces the identity ("I am someone who exercises") and the neural pathway. The quality of the habit follows automatically once the consistency is there.
+
+Environment design is dramatically more powerful than motivation. If you want to read before bed, put the book on your pillow. If you want to eat better, do not buy the junk food. If you want to use your phone less, physically put it in another room. Your environment is running most of your behavior — redesign it in your favor.
+
+And the trick for bad habits: do not try to stop them, replace them. The cue and the craving will still happen. Route the response toward something healthier that satisfies the same underlying craving.
+
+What habit are you trying to build or break? Tell me the specific one and I will help you design the exact system.`
+  },
+  'How will AI agents change work?': {
+    practical: `🤖 AI AGENTS + YOUR WORK — ACTION PLAN
+
+━━ WHAT AI AGENTS ARE DOING RIGHT NOW ━━
+✓ Research synthesis: replacing hours of manual information gathering
+✓ First-draft generation: emails, reports, code, summaries, analysis
+✓ Routine scheduling and coordination — calendar management, follow-ups
+✓ Data pattern identification — finding what humans would miss in large datasets
+✓ Answering repetitive questions — internal and customer-facing
+
+━━ BUILD THESE SKILLS THIS MONTH ━━
+✓ Prompt engineering — learn to give AI precise, effective multi-step instructions
+✓ Workflow design — stop thinking in individual tasks, think in automated systems
+✓ Output evaluation — spot AI errors, hallucinations, missing context
+✓ Tool fluency — use Claude, GPT-4, Cursor, Perplexity, Zapier AI actively daily
+
+━━ YOUR AI WORKFLOW (start this week) ━━
+① Any first draft (email, doc, plan) → AI generates → you refine + add judgment
+② Any research task → AI synthesizes background → you verify key facts + add insight
+③ Any repetitive process → explore automating via Make.com or Zapier
+④ Any complex decision → use AI as devil's advocate to stress-test your reasoning
+
+━━ HOW TO STAY IRREPLACEABLE ━━
+✓ Deep domain expertise + AI fluency = rare and extremely valuable combination
+✓ Genuine relationships and trust — AI cannot replicate authentic human connection
+✓ Creative vision and taste — directing what "good" looks like is a human function
+✓ Ethical accountability — someone has to own the outcomes, forever`,
+    conversational: `AI agents are genuinely one of the biggest shifts in how knowledge work gets done — possibly in decades — and understanding what is actually happening gives you a massive advantage over people who are either panicking or ignoring it.
+
+Here is what I mean by "agent": unlike chatGPT answering a question, an AI agent is given a goal and figures out and executes the steps to achieve it. You say "research our three main competitors and draft a comparison report" and it browses websites, collects information, synthesizes it, writes the draft, and formats it — the whole chain, autonomously.
+
+This changes the nature of work from "doing tasks" to "directing agents and judging outputs." Your job becomes setting the right goals, providing the right context, and evaluating whether the result is actually good.
+
+The skills that become more valuable: judgment, taste, ethical reasoning, genuine relationship-building, creative vision, and the ability to evaluate AI outputs critically. These are things AI is genuinely bad at right now.
+
+The skills that become less valuable: information retrieval, routine drafting, data formatting, template-based analysis. If your job is primarily these things — and many jobs are — the honest advice is to start building other skills now, not to wait.
+
+But here is what most people miss: the biggest opportunity is in people who combine strong domain expertise with AI fluency. The AI + healthcare professional, the AI + lawyer, the AI + financial analyst — these combinations are incredibly rare right now and disproportionately valuable. Companies are desperate for people who understand both worlds.
+
+The move to make today: pick one time-consuming task in your work and try using AI to produce the first version of it. Even if the result is imperfect, you will learn something important about what AI can and cannot do in your specific context.
+
+What is your current role? I can give you a much more specific picture of what this means for you personally.`
+  },
+  'How to stop procrastinating?': {
+    practical: `🧠 BEAT PROCRASTINATION — SCIENCE-BACKED TACTICS
+
+THE ROOT CAUSE: Procrastination is emotional avoidance, not laziness.
+You are not avoiding the task — you are avoiding the FEELING the task creates.
+
+━━ TACTICAL TOOLS ━━
+
+THE 5-MINUTE COMMITMENT:
+✓ Tell yourself: "I will work on this for just 5 minutes"
+✓ Set a real timer. Give yourself full permission to stop at 5 minutes.
+✓ You almost never stop — because starting was the only obstacle.
+✓ Works because procrastination is about the START, not the task itself.
+
+THE 2-MINUTE RULE:
+✓ Any task under 2 minutes → do it immediately, not later
+✓ Removes accumulation of small undone tasks that create mental drag and guilt
+
+IMPLEMENTATION INTENTIONS (proven to increase follow-through 2-3x):
+❌ "I will work on my report this week"
+✅ "I will work on my report at 9am Tuesday in my home office for 60 minutes"
+The specificity of WHEN + WHERE + WHAT is the key.
+
+SHRINK THE TASK:
+❌ "Write the proposal" → paralyzing
+✅ "Write the opening sentence of the proposal" → startable
+Make the next action so small it feels almost silly NOT to do it.
+
+COMMITMENT DEVICES:
+✓ Tell someone your deadline — social accountability outperforms self-discipline
+✓ Pay a friend $50 if you do not finish by Thursday
+✓ Book a focused work session at a library (leaving = social shame)`,
+    conversational: `Procrastination is almost never about laziness. Once you understand what it actually is, the whole thing makes much more sense — and the solutions become obvious.
+
+You are not avoiding the task. You are avoiding the FEELING associated with the task. The fear of doing it badly. The overwhelming vagueness of not knowing where to start. The discomfort of working on something that does not feel natural yet. The anxiety of potential judgment.
+
+This is why "just do it" is useless advice. Willpower battles are losing battles against a threat response. The real fix is reducing the emotional cost of starting.
+
+The tool I come back to constantly: the 5-minute commitment. Tell yourself you will work on the dreaded thing for exactly 5 minutes. Set a real timer. Give yourself complete permission to stop at 5 if you want. Almost nobody stops at 5. Because starting was the only obstacle — once you actually begin, the emotional resistance drops off sharply. The brain stops treating the task as a threat and starts treating it as just a thing you are doing.
+
+The second insight: procrastination grows when tasks are vague. "Work on the project" is paralyzing because your brain does not know where to aim. "Write the first bullet point of the outline" is concrete and startable. Make every next action so small and specific that not doing it feels almost silly.
+
+Implementation intentions are magic for this: research shows that saying "I will do X at Y time in Z location" increases follow-through by 2-3x compared to just saying "I will do X this week." The specificity converts intention into action automatically.
+
+And if all else fails: tell someone what you are going to do and when. Most people will work harder to avoid mild social embarrassment than they will for any abstract goal. Accountability is a cheat code.
+
+What specific task are you avoiding right now? Tell me and let us figure out exactly what is creating the resistance.`
+  },
+  'Building unshakeable confidence': {
+    practical: `💪 BUILD REAL CONFIDENCE — EVIDENCE-BASED SYSTEM
+
+━━ WEEK 1: BUILD YOUR EVIDENCE BASE ━━
+✓ Write 10 REAL achievements — anything hard you have done or survived
+✓ List 5 difficult situations you navigated successfully
+✓ Ask 3 people who know you well: "What do you think I am genuinely good at?"
+✓ This list is your anchor — read it every morning for 2 weeks
+
+━━ DAILY MICRO-COURAGE PRACTICE ━━
+✓ Do ONE uncomfortable thing per day (start tiny — speak up in a meeting, introduce yourself)
+✓ Speak first in group settings at least once daily
+✓ Give your opinion before asking others for theirs
+✓ Make direct eye contact and hold it 1-2 seconds longer than feels natural
+
+━━ BODY LANGUAGE THAT CREATES CONFIDENCE ━━
+✓ Shoulders back, take up your full physical space — stop making yourself smaller
+✓ Slow your speaking pace slightly — speed signals nervousness
+✓ Let pauses breathe without rushing to fill silence
+✓ Walk at a deliberate pace — not hurried, not slow
+
+━━ BUILD ACTUAL COMPETENCE ━━
+✓ Pick ONE skill, practice it until you are genuinely good
+✓ Competence creates authentic confidence — there is no shortcut
+✓ Track visible progress — seeing improvement is its own motivation
+
+━━ WHEN IMPOSTER THOUGHTS HIT ━━
+✓ Do not try to FEEL confident — just ACT as a confident version of you would act
+✓ Ask: "Is this thought based on evidence, or just a feeling?"
+✓ Remember: the feeling of not belonging is experienced by 70% of high achievers`,
+    conversational: `Real confidence is not something you get before doing scary things — it is something you build BY doing them. That one reframe changes everything about how to approach it.
+
+The popular advice is "just believe in yourself!" This is almost completely useless. You cannot will yourself into believing something your own experience has not given you evidence for. What you CAN do is take small actions, create real evidence from those actions, and let that evidence slowly build genuine belief over time.
+
+Here is the cycle: small uncomfortable action → you survive it, maybe even do okay → now you have real evidence you can handle this → slightly bigger action → more evidence → actual confidence. Slow, unglamorous, but the only kind that actually holds up under pressure.
+
+The practical version: daily micro-bravery. Not big dramatic gestures — just tiny uncomfortable things every single day. Speak up when you would normally stay quiet. Share an opinion you usually keep private. Introduce yourself to someone you would normally avoid. Each of these is a small act of courage. Each one adds a data point to your evidence file.
+
+Something counterintuitive that actually works: the body and mind connection runs both ways. Your brain monitors your body posture to assess confidence level. Standing tall, taking up space, speaking slowly — these behaviors send signals to your brain that you are safe and in control. Which then makes you actually feel more confident. The body leads, and the mind follows.
+
+And for imposter syndrome — which nearly every high achiever experiences at some level — the most useful question is not "do I deserve to be here?" but "would a confident version of me still take this action?" And then just do the action, feeling whatever you feel.
+
+What specific situation do you want to feel more confident in? The approach shifts quite a bit depending on whether it is career, social, public speaking, or something else.`
+  },
+  'How to negotiate a better salary?': {
+    practical: `💰 SALARY NEGOTIATION PLAYBOOK
+
+━━ BEFORE THE CONVERSATION ━━
+✓ Research: Glassdoor + Levels.fyi + LinkedIn Salary + Payscale — use all four
+✓ Write down 5 achievements with NUMBERS (saved $X, grew metric by Y%, shipped Z)
+✓ Set your target (market rate + 15-20%) and your walk-away number
+✓ Rehearse out loud — hearing yourself say a higher number reduces anxiety
+
+━━ THE NEGOTIATION ITSELF ━━
+① Let them offer first: "What is the budgeted range for this role?"
+② After their number: pause 5 full seconds in silence before responding
+③ Counter 15-20% above their offer with a concrete justification:
+   "Based on my research and the $200k in cost savings I drove last year, I was expecting $95k"
+④ Anchor with specifics — "$95,000" beats "$90-100k" every time
+
+━━ WHEN THEY SAY THE NUMBER IS FIRM ━━
+✓ "Is there flexibility on the signing bonus?"
+✓ "Could we build in a 6-month performance review with a target raise?"
+✓ "What about additional PTO or remote flexibility?"
+✓ Base salary is not the only thing negotiable
+
+━━ GOLDEN RULES ━━
+✓ NEVER accept on the spot — always: "Let me review this by tomorrow"
+✓ Get every agreed term in writing before signing
+✓ Negotiate EVERY offer — companies budget for it, they expect it
+✓ They will virtually never rescind an offer because you asked politely`,
+    conversational: `This is my favorite topic because most people are literally leaving thousands of dollars per year on the table — and it takes one conversation to fix.
+
+The mindset shift that changes everything: companies budget for negotiation. HR literally plans for candidates to counter. Not negotiating actually signals low confidence to many hiring managers. You are not being demanding — you are behaving professionally.
+
+Here is what actually works:
+
+Let them talk first. When an offer is made, ask "What is the budgeted range for this role?" before revealing any number. You want their anchor, not the other way around.
+
+Then: silence. After they give a number, wait 5 full, quiet seconds before responding. It is deeply uncomfortable. But people rush to fill silence and often improve their own offer before you say a single word.
+
+Counter higher than you want. Ask for 15-20% above their offer. They will meet you somewhere in the middle, and that middle is exactly where you wanted to land. The math is simple: if you ask for what you want, you get less than what you want.
+
+Justify with value, not need. "I need more for my rent" is weak. "Based on my market research and the $150k pipeline I managed last year, I was expecting $X" is powerful. Frame your worth in their terms, not yours.
+
+Never accept on the spot. No matter how exciting the offer, say: "This is exciting — let me review everything carefully and get back to you by tomorrow." That 24 hours costs you nothing and gives you leverage.
+
+One real example: a friend was offered $90k. She countered with $107k using specific performance data. They met at $98k + $6k signing bonus. That is $14k more for one 10-minute conversation.
+
+Worst case: they say no. They almost never do. And they definitely do not rescind the offer because you asked professionally.
+
+What were you offered, and what do you think you are worth? Let me help you think through the specific counter.`
+  },
+  'How to validate a startup idea?': {
+    practical: `🚀 VALIDATE YOUR IDEA IN 14 DAYS
+
+━━ DAYS 1-7: VALIDATE THE PROBLEM ━━
+① Write down your single riskiest assumption ("People will pay for X")
+② Identify 20 potential customers — NOT friends/family, actual target users
+③ Run 15-20 conversations using ONLY this script:
+   "Tell me about the last time you experienced [the problem]."
+④ Listen. Do NOT pitch your solution yet.
+
+GREEN LIGHTS ✓:
+• They describe the problem in detailed, emotional terms
+• They mention what they currently use to solve it (and complain about it)
+• They say "I would pay for that" before you ask
+
+RED FLAGS ✗:
+• "That sounds interesting / cool" — polite but meaningless
+• Only your friends are excited
+• They cannot recall a specific recent instance of the problem
+
+━━ DAYS 8-14: VALIDATE THE SOLUTION ━━
+① Build a landing page in 2-3 hours (Carrd.co — zero code needed)
+② Describe your solution clearly + add a "Join Waitlist" or "Pre-Order" button
+③ Drive 100+ visitors from: Reddit threads, LinkedIn posts, $50 Facebook ads
+④ Benchmarks:
+   • 20%+ signup rate → promising signal
+   • 40%+ signup rate → strong signal
+   • 3+ people pre-pay any amount → REAL validation
+
+⚡ ULTIMATE TEST: Can you get someone to pay BEFORE you build anything?
+Even $1 of pre-payment beats 1,000 "that sounds interesting" responses.`,
+    conversational: `Validating before building is the single highest-leverage thing you can do as a founder. Most first-time founders skip it and spend 6-12 months building something nobody actually wants. Let me walk you through what actually works.
+
+The core philosophy: fall in love with the PROBLEM, not your solution. Your solution will change many times. The problem is what you are really building a business around. And the only way to know if the problem is real and painful enough is to talk to actual humans who should have it.
+
+The magic interview script: ask this before showing anyone your idea — "Tell me about the last time you experienced [the problem you are solving]." That is it. No pitch, no explanation, just pure listening.
+
+If they say "hmm, I cannot really remember a specific time" → the problem might not be painful enough.
+If they light up and tell you a detailed story about how frustrating it is and what they have tried → you are onto something real.
+
+Run 15-20 of these conversations with people who are GENUINELY your target customer. Not your friends, not your family — people who would actually need to buy this. This is uncomfortable and takes effort. That is the whole point.
+
+Then the smoke test: build a simple landing page (Carrd.co takes two hours, no code). Describe your solution clearly and add a waitlist or pre-order button. Bring some traffic to it — post in relevant subreddits, LinkedIn, or run $50 in Facebook ads. If 20%+ of visitors sign up, that is a real market signal.
+
+If you can get anyone to actually pay before you build anything — even $5 — that is worth more than 500 "love this idea!" responses from people who are being polite.
+
+Uncomfortable truth: most startup ideas do not survive honest validation. And discovering this in week two is the BEST thing that can happen to you — it is infinitely better than month twelve.
+
+Tell me your idea — I love helping people design specific validation experiments.`
+  },
+};
+
+// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
+
+export default function AIGrow() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [darkMode, setDarkMode] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [activeTab, setActiveTab] = useState<Tab>('paths');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [showProfileSetup, setShowProfileSetup] = useState(false);
-  const [currentStreak, setCurrentStreak] = useState(0);
-  const [showStats, setShowStats] = useState(false);
+  const [showSetup, setShowSetup] = useState(true);
+  const [showXPNotif, setShowXPNotif] = useState(false);
+  const [newAchievement, setNewAchievement] = useState<string | null>(null);
+  const [activePath, setActivePath] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typingText, setTypingText] = useState('');
+  const [typingFull, setTypingFull] = useState('');
+  const [typingDone, setTypingDone] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // UNIQUE FEATURE 1: Smart Category-Based Learning Paths
-  const learningPaths = [
-    {
-      category: '🎯 Career Growth',
-      icon: '📈',
-      color: 'from-emerald-500 to-teal-600',
-      questions: [
-        'How do I transition to a tech career?',
-        'What skills are most valuable in 2025?',
-        'How to negotiate a better salary?',
-        'Building a personal brand strategy',
-      ],
-    },
-    {
-      category: '🧠 Mental Models',
-      icon: '💭',
-      color: 'from-purple-500 to-pink-600',
-      questions: [
-        'What is first principles thinking?',
-        'How to make better decisions under pressure?',
-        'Understanding cognitive biases',
-        'Systems thinking explained',
-      ],
-    },
-    {
-      category: '🚀 Startup & Innovation',
-      icon: '💡',
-      color: 'from-orange-500 to-red-600',
-      questions: [
-        'How to validate a startup idea?',
-        'What makes a great MVP?',
-        'Finding product-market fit',
-        'Fundraising strategies for beginners',
-      ],
-    },
-    {
-      category: '⚡ Productivity Hacks',
-      icon: '⏱️',
-      color: 'from-blue-500 to-cyan-600',
-      questions: [
-        'The Pomodoro Technique explained',
-        'How to build a second brain?',
-        'Deep work vs shallow work',
-        'Time blocking for maximum output',
-      ],
-    },
-    {
-      category: '🤖 AI & Future Tech',
-      icon: '🔮',
-      color: 'from-indigo-500 to-purple-600',
-      questions: [
-        'How will AI agents change work?',
-        'Understanding GPT and LLMs',
-        'Quantum computing for beginners',
-        'The future of human-AI collaboration',
-      ],
-    },
-    {
-      category: '💪 Personal Development',
-      icon: '🌟',
-      color: 'from-yellow-500 to-orange-600',
-      questions: [
-        'Building unshakeable confidence',
-        'The science of habit formation',
-        'Overcoming imposter syndrome',
-        'Emotional intelligence mastery',
-      ],
-    },
-  ];
-
-  // UNIQUE FEATURE 2: Comprehensive answer database with learning style adaptation
-  const predefinedAnswers: Record<string, Record<string, string>> = {
-    'How do I transition to a tech career?': {
-      visual: '🎯 TECH CAREER TRANSITION ROADMAP:\n\n┌─ ASSESS (Month 1-2)\n│  • Identify transferable skills\n│  • Research roles: Developer, PM, Designer, Data\n│  • Take skill assessments\n│\n├─ LEARN (Month 3-6)\n│  • Pick ONE path (coding/design/product)\n│  • Online courses: freeCodeCamp, Coursera\n│  • Build 2-3 portfolio projects\n│\n├─ NETWORK (Month 4-8)\n│  • LinkedIn optimization\n│  • Tech meetups & communities\n│  • Coffee chats with insiders\n│\n└─ APPLY (Month 6-12)\n    • Tailor resume for ATS\n    • Apply to 5-10 jobs/week\n    • Practice technical interviews\n\nPro tip: Start with a bootcamp or nanodegree for structured learning!',
-      practical: '🚀 ACTION PLAN - TECH CAREER SWITCH:\n\nWEEK 1-2: Take Action\n✓ Create GitHub account\n✓ Build your first project (Todo app, calculator)\n✓ Join tech Discord/Slack communities\n\nMONTH 1-3: Skill Building\n✓ Complete one coding bootcamp or course\n✓ Contribute to open source (good first issues)\n✓ Build 3 real projects you can demo\n\nMONTH 3-6: Job Hunting\n✓ Apply to junior roles AND internships\n✓ Do 50+ LeetCode problems if applying for dev\n✓ Network: Comment on LinkedIn, attend meetups\n\nReal example: Sarah, accountant to frontend dev in 8 months by coding 2hrs daily + bootcamp.',
-      theoretical: '📚 COMPREHENSIVE TECH TRANSITION FRAMEWORK:\n\nCONCEPTUAL FOUNDATION:\nTech careers reward problem-solving + continuous learning over credentials. The barrier to entry has lowered due to democratized education.\n\nKEY PRINCIPLES:\n1. Leverage Transfer - Your domain expertise is valuable\n2. T-Shaped Skills - Deep in one area, broad awareness of adjacent fields\n3. Signal vs Noise - Portfolio beats Degree in tech\n\nSTRATEGIC APPROACH:\n• Market Research: Analyze job postings, identify skill gaps\n• Skill Acquisition: Formal (bootcamp) + Informal (self-study)\n• Proof of Work: GitHub commits, deployed projects, technical writing\n• Network Effects: Referrals account for 30-50% of tech hires\n\nCRITICAL SUCCESS FACTORS: Consistency, building in public, genuine curiosity.',
-      conversational: 'Hey! So you want to break into tech? I love it - and it is totally doable! 🎉\n\nHere is the real talk: you do not need a CS degree. I have seen teachers, nurses, and even a former chef become successful developers.\n\nStart here:\n1. Pick your path - coding, design, product, or data. Try each for a week.\n2. Learn by building - forget just watching tutorials. Make stuff!\n3. Show your work - GitHub, LinkedIn, Twitter. Document your journey.\n4. Connect with humans - tech Twitter is gold. Comment, share, engage.\n\nThe secret sauce? Consistency beats intensity. 1 hour daily for 6 months beats cramming weekends.\n\nYou have got this! 💪',
-    },
-
-    'What skills are most valuable in 2025?': {
-      visual: '💎 TOP SKILLS 2025:\n\n[HIGH DEMAND + HIGH PAY]\n━━━━━━━━━━━━━━━━━━━━\n🤖 AI/ML Engineering\n📊 Data Science & Analytics\n☁️ Cloud Architecture\n🔒 Cybersecurity\n💻 Full-Stack Development\n\n[RISING FAST]\n━━━━━━━━━━\n✍️ Prompt Engineering\n🎨 AI-Assisted Design\n📱 No-Code/Low-Code\n🔗 Blockchain\n\n[TIMELESS]\n━━━━━━━━━━\n💬 Communication\n🎯 Critical Thinking\n🤝 Emotional Intelligence\n📈 Sales & Persuasion\n\nCombine technical + soft skills!',
-      practical: '🎯 ACTIONABLE SKILL PLAN:\n\nTECH SKILLS (Pick 1-2):\n✓ Learn Python or JavaScript (3 months)\n✓ Master Excel + SQL (1 month)\n✓ Use ChatGPT for automation (ongoing)\n✓ Build 3 projects to showcase\n\nSOFT SKILLS (Daily):\n✓ Write clear emails/messages\n✓ Practice active listening\n✓ Learn to say no diplomatically\n✓ Give presentations\n\nHIGH-ROI MOVES:\n• Public speaking course → 10x influence\n• Learn basic design → stand out\n• Master storytelling → sell ideas\n• Build online presence\n\nStart today: Pick ONE skill, 30 mins daily for 30 days.',
-      theoretical: '📚 2025 SKILLS LANDSCAPE:\n\nMACRO TRENDS:\n1. AI Augmentation - Every job involves AI\n2. Remote Work - Communication critical\n3. Automation - Routine tasks disappearing\n4. Specialization + Versatility paradox\n\nSKILL CATEGORIES:\n\nTECHNICAL: AI/ML, Data, Cloud, Security\nCOGNITIVE: Systems thinking, First principles\nSOCIAL: Persuasion, Cross-cultural communication\n\nKEY INSIGHT: Learn to learn. Specific tools change, but meta-skills compound forever.',
-      conversational: 'Great question! The job market is wild right now.\n\n🔥 HOTTEST:\nAnything AI-related. If you can use ChatGPT/Claude effectively, you are ahead of 80% of people.\n\nSecret: Do not just learn AI. Learn AI + your domain. AI + marketing = gold.\n\n💪 NEVER DIE:\n• Writing clearly\n• Speaking confidently\n• Selling ideas\n• Understanding people\n\nMy friend Jake learned Python + data analysis. Doubled his salary in 6 months. Why? He automated boring stuff at work.\n\nMy advice: Pick ONE technical skill and ONE soft skill. Give it 90 days.\n\nWhat is your current role? I can suggest specific skills!',
-    },
-
-    'How to negotiate a better salary?': {
-      visual: '💰 SALARY NEGOTIATION:\n\n[RESEARCH]\n     ↓\n┌─ Market rate\n│  Company budget\n│  Your leverage\n│\n├─ BUILD CASE\n│  List achievements\n│  Quantify impact\n│  Gather offers\n│\n├─ NEGOTIATE\n│  1. Let them talk\n│  2. Anchor high\n│  3. Stay silent\n│  4. Get creative\n│\n└─ CLOSE\n    Get it in writing\n    Celebrate! 🎉\n\nGOLDEN RULE: Never accept first offer.',
-      practical: '🚀 NEGOTIATION GUIDE:\n\nWEEK BEFORE:\n1. Research on Glassdoor, Levels.fyi\n2. Document your wins\n3. Get competing offers\n\nDURING CALL:\n1. "What is the range for this role?"\n2. Let THEM say number first\n3. Pause 5 seconds (silence = power)\n4. Counter 15-20% higher\n5. Justify with specific value\n\nIF NO:\n• "Flexibility on signing bonus?"\n• "Revisit in 3 months?"\n• "Extra PTO or remote flexibility?"\n\nEXAMPLE:\nOffer: $80k\nYou: [silence] "I was hoping $95k"\nThem: "Best is $88k"\nYou: "$5k signing bonus + 6 month review?"\nWIN!\n\nNEVER accept on spot. "Let me review by tomorrow."',
-      theoretical: '📚 NEGOTIATION PSYCHOLOGY:\n\nCORE PRINCIPLES:\n1. Anchoring Effect - First number sets range\n2. Loss Aversion - They do not want to lose you\n3. Reciprocity - Give to get\n4. BATNA - Best Alternative\n\nPOWER DYNAMICS:\nLeverage = f(Options, Timing, Demand)\n\nMISTAKES:\n1. Accepting first offer (-10-20%)\n2. Justifying with personal needs\n3. Lying about offers\n4. Negotiating too early\n\nSTRATEGY:\n1. Delay until offer stage\n2. Research market rate\n3. Let them anchor OR anchor high\n4. Negotiate total compensation\n5. Use silence\n6. Get competing offers\n\nKEY: Negotiation is expected. Not negotiating signals low confidence.',
-      conversational: 'Oh man, favorite topic! Most people leave SO much money on the table.\n\nWRONG:\n❌ "I need $X for rent" - They do not care\n❌ Accept first offer - Always mistake\n❌ Feel guilty - Companies EXPECT this\n\nWORKS:\n\n1. DO HOMEWORK: Glassdoor, Levels.fyi. Add 15-20%.\n\n2. TIMING: Never talk numbers until they want you.\n\n3. MAKE THEM GO FIRST:\n"What were you thinking?"\n\n4. SILENCE POWER:\nThem: "$80k"\nYou: [5 seconds]\nThem: "Maybe $85k"\n\nWorks every time! 😄\n\n5. NEVER ACCEPT ON SPOT:\n"Let me review tomorrow."\n\nMy friend Sarah: Offered $90k, asked $105k, got $98k + bonus. Extra $8k/year FOREVER.\n\nWorst they say is no. And they almost never do.\n\nWant to walk through your scenario?',
-    },
-
-    'Building a personal brand strategy': {
-      visual: '🎯 PERSONAL BRAND:\n\n[WHO ARE YOU?]\n      ↓\n   FOUNDATION\n   • Expertise\n   • Values\n   • Unique POV\n      ↓\n   CONTENT HUB\n   Pick 1-2:\n   • LinkedIn\n   • Twitter/X\n   • Newsletter\n      ↓\n   CONSISTENCY\n   • 3x/week\n   • Same topics\n   • Same voice\n      ↓\n   ENGAGE\n   • Comment 5x\n   • DM people\n   • Collaborate\n      ↓\n  [BRAND EQUITY]\n\nExpertise × Visibility × Authenticity = Brand Value',
-      practical: '🚀 30-DAY BRAND LAUNCH:\n\nWEEK 1:\n✓ Define niche (AI + Marketing)\n✓ Update LinkedIn/Twitter\n✓ Write origin story\n\nWEEK 2:\n✓ Create 10 content ideas\n✓ Write 3 posts\n✓ Schedule for 2 weeks\n\nWEEK 3:\n✓ Comment on 5 posts daily\n✓ DM 3 people you admire\n✓ Share others content\n\nWEEK 4:\n✓ Post 3x this week\n✓ Start weekly series\n✓ Engage with comments\n\nCONTENT IDEAS:\n• "3 mistakes I made in [field]"\n• "How I [result] in [time]"\n• "Unpopular opinion about [topic]"\n\nQUICK WINS:\n• Professional photo\n• Simple language\n• Personal stories\n• 3x/week minimum',
-      theoretical: '📚 PERSONAL BRANDING:\n\nDEFINITION:\nYour brand = What people say when you are not there. Intersection of expertise, values, communication.\n\nCOMPONENTS:\n\n1. POSITIONING\n• Niche: Broad to grow, narrow to own\n• Differentiation: Unique POV\n• Target: Who needs you?\n\n2. CONTENT PILLARS (3-4)\n• Core expertise\n• Adjacent skill\n• Lessons learned\n• Industry insights\n\n3. CHANNELS\n• Owned: Newsletter, blog\n• Earned: Guest posts, podcasts\n• Social: LinkedIn, Twitter\n\n4. ENGAGEMENT\n• Give > Ask (80/20)\n• Consistent > Perfect\n• Relationships > Followers\n\n5. METRICS\n• Vanity: Followers, likes\n• Real: DMs, opportunities, revenue\n\nPRINCIPLES:\n• Authenticity compounds\n• Consistency beats intensity\n• Network effects real\n• Brand = Career insurance',
-      conversational: 'Building a personal brand changed my life. Let me share what works:\n\nForget fake stuff. Do not be Gary Vee. YOUR story, YOUR voice - that is your advantage.\n\nSIMPLE FRAMEWORK:\n\n1. PICK LANE:\nNot "a marketer." Be "helps SaaS get first 100 customers."\nSpecific = Memorable\n\n2. SHOW UP:\nI post 3x/week. Monday, Wednesday, Friday. Like gym - consistency builds muscle.\n\n3. GIVE VALUE:\n• "Exact email that got 5 clients"\n• "3 mistakes cost me $10k"\n• "What I wish I knew"\n\n4. ENGAGE HUMAN:\nComment. DM. Thank people. Most do not, so huge differentiator.\n\n5. BE PATIENT:\nFirst 6 months: crickets 🦗\nMonths 6-12: Few comments\nYear 2: Opportunities rolled in\n\nNow? Job offers weekly without applying.\n\nSTART TODAY:\n• Update LinkedIn headline\n• Write one lesson post\n• Comment on 5 posts\n\nWhat is your expertise? Let us craft your first post!',
-    },
-
-    'What is first principles thinking?': {
-      visual: '🧠 FIRST PRINCIPLES:\n\n[Problem/Assumption]\n       ↓\n┌──────────────────┐\n│ BREAK IT DOWN    │\n│ Into basic truths│\n└──────────────────┘\n       ↓\n┌──────────────────┐\n│ QUESTION EACH    │\n│ assumption       │\n└──────────────────┘\n       ↓\n┌──────────────────┐\n│ REBUILD from     │\n│ ground up        │\n└──────────────────┘\n       ↓\n  [New Solution]\n\nEXAMPLE - SpaceX:\n❌ "Rockets expensive" → Accept\n✅ "What ARE rockets? Raw materials cost?" → Build cheaper\n\nWhen stuck, ask "What do I know is absolutely true?" Start there.',
-      practical: '⚡ FIRST PRINCIPLES IN ACTION:\n\nSTEP-BY-STEP:\n\n1. Identify problem:\n   "Cannot afford gym"\n\n2. Break to fundamentals:\n   • Need equipment for fit?\n   • What IS fitness? (strength + cardio + flexibility)\n   • Cheapest way for each?\n\n3. Rebuild:\n   • Strength: Bodyweight (free)\n   • Cardio: Running (free)\n   • Flexibility: YouTube yoga (free)\n   → No gym needed!\n\nTRY NOW:\nPick a problem. Ask "Why?" 5 times to get core truth. Build from there.\n\nElon uses this for everything. You can too!',
-      theoretical: '🎓 FIRST PRINCIPLES - FOUNDATION:\n\nORIGINS:\nAristotle: "First basis from which thing is known." Reasoning from foundational truths vs analogy.\n\nMETHODOLOGY:\n1. Deconstruction - Break to basic elements\n2. Verification - Identify provably true vs assumed\n3. Reconstruction - Build from verified truths\n\nVS ANALOGICAL:\n• Analogy: "Others do X, so should I"\n• First Principles: "What is fundamental nature of X?"\n\nAPPLICATIONS:\n• Science: Newton, Einstein\n• Business: Musk, Bezos\n• Personal: Any domain conventions may be wrong\n\nLIMITATIONS: Time-intensive, requires deep domain knowledge, not always necessary.',
-      conversational: 'Ah, first principles! Favorite thinking tool. 🧠\n\nImagine building with LEGO. Most copy designs (analogies). First principles? Dump blocks out and think: "What can I build with THESE pieces?"\n\nReal example:\nEveryone said "Need office for business." I asked: "Do I REALLY? What do I ACTUALLY need?" Turns out: laptop + WiFi. Boom - remote business.\n\nElon famous for this. Told rockets cost millions, he did not accept. Asked: "What IS rocket? Metal + fuel + computers. How much REALLY?" Way less than NASA paid.\n\nHow to use:\n1. Stop accepting "that is how it is done"\n2. Ask "what is fundamentally true?"\n3. Build own path from truths\n\nLike being kid again - questioning everything! Try it on a problem?',
-    },
-  };
-
-  // UNIQUE FEATURE 3: Adaptive difficulty based on user level
-  const getPersonalizedResponse = (question: string, profile: UserProfile | null): string => {
-    const learningStyle = profile?.learningStyle || 'conversational';
-    const skillLevel = profile?.skillLevel || 'beginner';
-    
-    // First, check if we have a learning-style-specific answer
-    if (predefinedAnswers[question]) {
-      if (predefinedAnswers[question][learningStyle]) {
-        return predefinedAnswers[question][learningStyle];
-      }
-      // If not in the user's preferred style, return any available style
-      const availableStyles = Object.keys(predefinedAnswers[question]);
-      if (availableStyles.length > 0) {
-        return predefinedAnswers[question][availableStyles[0]];
-      }
-    }
-    
-    // Enhanced fallback response with personalization
-    const stylePrefix = {
-      visual: '📊 VISUAL BREAKDOWN:\n\n',
-      practical: '🎯 ACTION STEPS:\n\n',
-      theoretical: '📚 DEEP DIVE:\n\n',
-      conversational: 'Great question! Let me break this down:\n\n',
-    };
-    
-    const styleSuffix = {
-      visual: '\n\n💡 TIP: Try creating a mind map or diagram of this concept to visualize the connections!',
-      practical: '\n\n💡 TIP: The best way to learn is by doing. Start with a small project today!',
-      theoretical: '\n\n💡 TIP: Dive deeper by reading research papers and case studies on this topic.',
-      conversational: '\n\n💡 TIP: Want to chat more about this? Ask me follow-up questions!',
-    };
-    
-    return `${stylePrefix[learningStyle]}I would love to give you a detailed answer about "${question}"!\n\nThis is a ${skillLevel}-level topic. ${
-      profile ? `Based on your interest in ${profile.interests[0] || 'learning'}, ` : ''
-    }here is what I recommend:\n\n${
-      learningStyle === 'visual' 
-        ? '• Look for infographics and diagrams\n• Create a visual mind map\n• Watch explainer videos with animations' :
-      learningStyle === 'practical' 
-        ? '• Find a hands-on tutorial or course\n• Build a small project to apply the concept\n• Practice with real examples' :
-      learningStyle === 'theoretical' 
-        ? '• Read academic papers or books on the subject\n• Study the foundational principles\n• Explore different theoretical frameworks' :
-        '• Join discussion forums and communities\n• Ask experts for their perspectives\n• Learn through conversation and storytelling'
-    }${styleSuffix[learningStyle]}`;
-  };
-
+  // Load from localStorage
   useEffect(() => {
-    // Only run on client-side
     if (typeof window === 'undefined') return;
-
-    const savedMessages = localStorage.getItem('chatHistory');
-    const savedProfile = localStorage.getItem('userProfile');
-    const lastVisit = localStorage.getItem('lastVisit');
-    
-    if (savedMessages) {
+    const sp = localStorage.getItem('aigrow_profile');
+    const sm = localStorage.getItem('aigrow_messages');
+    if (sp) {
       try {
-        const parsed = JSON.parse(savedMessages);
-        setMessages(parsed.map((m: Message) => ({
-          ...m,
-          timestamp: new Date(m.timestamp)
-        })));
-      } catch (e) {
-        console.error('Error parsing saved messages:', e);
-      }
-    }
-    
-    if (savedProfile) {
-      try {
-        const profile = JSON.parse(savedProfile) as UserProfile;
-        setUserProfile(profile);
-        setShowWelcome(false);
-        
-        // Calculate streak
+        const p: UserProfile = JSON.parse(sp);
+        const lastVisit = p.lastVisit ? new Date(p.lastVisit) : null;
+        const now = new Date();
         if (lastVisit) {
-          const daysSince = Math.floor((Date.now() - new Date(lastVisit).getTime()) / (1000 * 60 * 60 * 24));
-          if (daysSince === 1) {
-            profile.streak += 1;
-            setUserProfile(profile);
-            localStorage.setItem('userProfile', JSON.stringify(profile));
-          } else if (daysSince > 1) {
-            profile.streak = 1;
-            setUserProfile(profile);
-            localStorage.setItem('userProfile', JSON.stringify(profile));
-          }
+          const daysDiff = Math.floor((now.getTime() - lastVisit.getTime()) / 86400000);
+          if (daysDiff === 1) p.streak = (p.streak || 0) + 1;
+          else if (daysDiff > 1) p.streak = 1;
         }
-        setCurrentStreak(profile.streak || 0);
-      } catch (e) {
-        console.error('Error parsing profile:', e);
-      }
+        p.lastVisit = now.toISOString();
+        setUserProfile(p);
+        localStorage.setItem('aigrow_profile', JSON.stringify(p));
+        setShowSetup(false);
+      } catch { /* ignore */ }
     }
-    
-    localStorage.setItem('lastVisit', new Date().toISOString());
-
-    const savedTheme = localStorage.getItem('theme');
-    const prefersDark = typeof window !== 'undefined' && window.matchMedia 
-      ? window.matchMedia('(prefers-color-scheme: dark)').matches 
-      : false;
-    const theme = savedTheme ?? (prefersDark ? 'dark' : 'light');
-
-    setDarkMode(theme === 'dark');
-    if (typeof document !== 'undefined') {
-      document.documentElement.classList.toggle('dark', theme === 'dark');
+    if (sm) {
+      try {
+        const msgs = JSON.parse(sm).map((m: Message) => ({ ...m, timestamp: new Date(m.timestamp) }));
+        setMessages(msgs);
+        if (msgs.length > 0) setActiveTab('chat');
+      } catch { /* ignore */ }
     }
   }, []);
 
+  // Save messages
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    
     if (messages.length > 0) {
-      localStorage.setItem('chatHistory', JSON.stringify(messages));
+      localStorage.setItem('aigrow_messages', JSON.stringify(messages));
     }
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const toggleDarkMode = () => {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-    if (typeof document !== 'undefined') {
-      document.documentElement.classList.toggle('dark', newMode);
-    }
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('theme', newMode ? 'dark' : 'light');
-    }
-  };
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, typingText]);
 
-  const clearHistory = () => {
-    if (typeof window === 'undefined') return;
-    
-    const userConfirmed = confirm('Clear all chat history?');
-    if (userConfirmed) {
-      setMessages([]);
-      localStorage.removeItem('chatHistory');
-    }
-  };
-
-  const createProfile = (name: string, learningStyle: UserProfile['learningStyle'], skillLevel: UserProfile['skillLevel'], interests: string[]) => {
-    const newProfile: UserProfile = {
-      name,
-      learningStyle,
-      interests,
-      skillLevel,
-      streak: 1,
-      totalChats: 0,
-      favoriteTopics: [],
-    };
-    setUserProfile(newProfile);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('userProfile', JSON.stringify(newProfile));
-    }
-    setShowProfileSetup(false);
-    setShowWelcome(false);
-    inputRef.current?.focus();
-  };
-
-  const getAIResponse = (question: string, category?: string) => {
-    const userMessage: Message = {
-      role: 'user',
-      text: question,
-      timestamp: new Date(),
-      id: Date.now().toString(),
-      category,
-      sentiment: 'curious',
-    };
-    
-    setMessages((prev) => [...prev, userMessage]);
-    setIsTyping(true);
-
-    // Update user stats
-    if (userProfile) {
-      const updatedProfile = {
-        ...userProfile,
-        totalChats: userProfile.totalChats + 1,
-      };
-      setUserProfile(updatedProfile);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('userProfile', JSON.stringify(updatedProfile));
+  // Typewriter effect
+  useEffect(() => {
+    if (!typingFull || typingDone) return;
+    let i = typingText.length;
+    const interval = setInterval(() => {
+      if (i >= typingFull.length) {
+        setTypingDone(true);
+        clearInterval(interval);
+        return;
       }
+      setTypingText(typingFull.slice(0, i + 1));
+      i++;
+    }, 8);
+    return () => clearInterval(interval);
+  }, [typingFull, typingDone, typingText]);
+
+  const checkAchievements = useCallback((profile: UserProfile) => {
+    const earned = ACHIEVEMENTS.filter(a => !profile.achievements.includes(a.id) && a.trigger(profile));
+    if (earned.length > 0) {
+      const updated = { ...profile, achievements: [...profile.achievements, ...earned.map(a => a.id)] };
+      setUserProfile(updated);
+      localStorage.setItem('aigrow_profile', JSON.stringify(updated));
+      setNewAchievement(earned[0].label);
+      setTimeout(() => setNewAchievement(null), 3500);
     }
+  }, []);
+
+  const getPersonalizedResponse = (question: string, profile: UserProfile | null): string => {
+    const style = profile?.learningStyle ?? 'conversational';
+    if (predefinedAnswers[question]) {
+      return predefinedAnswers[question][style] ?? predefinedAnswers[question][Object.keys(predefinedAnswers[question])[0]];
+    }
+    const fallbacks: Record<string, string> = {
+      practical: `🎯 PRACTICAL GUIDE: ${question}\n\nHere is a structured action plan:\n\n✓ Research the fundamentals through reputable sources and documentation\n✓ Find 2-3 real examples of people who have successfully tackled this\n✓ Break it into the smallest possible first step and take that step TODAY\n✓ Build a feedback loop — track what works and what does not\n✓ Connect with others who have done this — communities accelerate learning significantly\n\nThe key insight: start before you feel ready. Readiness comes from doing, not from preparing to do.`,
+      conversational: `Great question! "${question}" is something I have thought about a lot.\n\nHere is my honest take: the answer depends heavily on your specific context, but the core principles are usually simpler than they seem.\n\nThe most important thing is to start with a clear understanding of WHY this matters to you — the strongest motivation comes from connecting the answer to something genuinely meaningful in your own life.\n\nFrom there, find people who have already done what you are trying to do and study their path. Most are more accessible than you think.\n\nWhat is the specific context that brought up this question? That would help me give you much more targeted advice.`,
+      visual: `📊 VISUAL FRAMEWORK: ${question}\n\nThink of it as three interconnected layers:\n\nLayer 1 — FOUNDATION: The core concepts and principles that everything else builds on\nLayer 2 — APPLICATION: How those principles translate into real-world actions\nLayer 3 — MASTERY: The nuances and edge cases that differentiate good from great\n\nThe most important visual: map out where you are now and where you want to be. The gap IS your action plan. Every step that reduces that gap is progress.`,
+      theoretical: `📚 CONCEPTUAL DEEP DIVE: ${question}\n\nAt its core, this question touches on several interrelated principles:\n\nFirst, understand the underlying mechanisms — not just what works but WHY it works. This generative understanding lets you adapt to novel situations.\n\nSecond, explore the historical context — how did current best practices evolve? What replaced what? What was tried and failed?\n\nThird, examine the edge cases and exceptions — these reveal the boundaries of any model and sharpen your overall understanding.\n\nRecommended frameworks to explore: systems thinking, first principles reasoning, and feedback loop analysis all apply well here.`
+    };
+    return fallbacks[style] ?? fallbacks.conversational;
+  };
+
+  const sendMessage = (question: string, category?: string) => {
+    if (!question.trim()) return;
+
+    const userMsg: Message = {
+      role: 'user', text: question.trim(),
+      timestamp: new Date(), id: `u-${Date.now()}`, category,
+    };
+    setMessages(prev => [...prev, userMsg]);
+    setInput('');
+    setIsTyping(true);
+    setActiveTab('chat');
 
     setTimeout(() => {
-      const answer = getPersonalizedResponse(question, userProfile);
-
-      const aiMessage: Message = {
-        role: 'ai',
-        text: answer,
-        timestamp: new Date(),
-        id: (Date.now() + 1).toString(),
-        category,
-        sentiment: 'positive',
+      const answer = getPersonalizedResponse(question.trim(), userProfile);
+      const aiMsg: Message = {
+        role: 'ai', text: answer,
+        timestamp: new Date(), id: `a-${Date.now()}`, category,
+        tokens: Math.floor(answer.length / 4),
       };
-
-      setMessages((prev) => [...prev, aiMessage]);
+      setMessages(prev => [...prev, aiMsg]);
       setIsTyping(false);
-    }, 1500);
+
+      // Start typewriter for last message
+      setTypingText('');
+      setTypingFull(answer);
+      setTypingDone(false);
+
+      if (userProfile) {
+        const updated: UserProfile = {
+          ...userProfile,
+          totalChats: userProfile.totalChats + 1,
+          xp: userProfile.xp + XP_PER_CHAT,
+          level: getLevelInfo(userProfile.xp + XP_PER_CHAT).level,
+          lastVisit: new Date().toISOString(),
+        };
+        setUserProfile(updated);
+        localStorage.setItem('aigrow_profile', JSON.stringify(updated));
+        setShowXPNotif(true);
+        setTimeout(() => setShowXPNotif(false), 2000);
+        checkAchievements(updated);
+      }
+    }, 900 + Math.random() * 600);
   };
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    getAIResponse(input.trim());
-    setInput('');
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(input);
+    }
   };
 
-  const formatMessage = (text: string) => {
-    return text.split('\n').map((line, i) => (
-      <span key={i}>
-        {line}
-        {i < text.split('\n').length - 1 && <br />}
-      </span>
-    ));
+  const addReaction = (id: string, r: Message['reaction']) => {
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, reaction: m.reaction === r ? undefined : r } : m));
   };
 
-  // Profile setup screen
-  if (showProfileSetup || (showWelcome && !userProfile)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-indigo-900/20 dark:to-purple-900/20 p-4">
-        <div className="max-w-2xl w-full">
-          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-gray-200/50 dark:border-gray-700/50">
-            <div className="text-center mb-8">
-              <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 rounded-full flex items-center justify-center shadow-xl animate-pulse">
-                <span className="text-5xl">🧠</span>
-              </div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-3">
-                Welcome to AI GROW
-              </h1>
-              <p className="text-lg text-gray-600 dark:text-gray-400">
-                Your AI learns YOUR way. Let us personalize your experience.
+  const filteredPaths = learningPaths.map(p => ({
+    ...p,
+    questions: searchQuery
+      ? p.questions.filter(q => q.toLowerCase().includes(searchQuery.toLowerCase()))
+      : p.questions,
+  })).filter(p => !searchQuery || p.questions.length > 0);
+
+  if (showSetup) {
+    return <SetupScreen onComplete={(profile) => {
+      setUserProfile(profile);
+      localStorage.setItem('aigrow_profile', JSON.stringify(profile));
+      setShowSetup(false);
+    }} onSkip={() => setShowSetup(false)} />;
+  }
+
+  const levelInfo = userProfile ? getLevelInfo(userProfile.xp) : null;
+
+  return (
+    <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", minHeight: '100vh', background: '#0c0e14', color: '#e8eaf0', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+      {/* Background mesh */}
+      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
+        <div style={{ position: 'absolute', top: -200, right: -200, width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)' }} />
+        <div style={{ position: 'absolute', bottom: -100, left: -100, width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(244,63,94,0.08) 0%, transparent 70%)' }} />
+      </div>
+
+      {/* XP Notification */}
+      {showXPNotif && (
+        <div style={{ position: 'fixed', top: 80, right: 20, zIndex: 100, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 700, color: '#fff', boxShadow: '0 8px 32px rgba(99,102,241,0.4)', animation: 'slideInRight 0.3s ease' }}>
+          +{XP_PER_CHAT} XP ✨
+        </div>
+      )}
+
+      {/* Achievement Toast */}
+      {newAchievement && (
+        <div style={{ position: 'fixed', top: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'linear-gradient(135deg, #f59e0b, #f97316)', padding: '12px 24px', borderRadius: 16, fontSize: 14, fontWeight: 700, color: '#fff', boxShadow: '0 8px 32px rgba(245,158,11,0.5)', whiteSpace: 'nowrap' }}>
+          🏆 Achievement Unlocked: {newAchievement}
+        </div>
+      )}
+
+      {/* Header */}
+      <header style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(12,14,20,0.92)', backdropFilter: 'blur(16px)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 20px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🧠</div>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.5px', background: 'linear-gradient(135deg, #a5b4fc, #f9a8d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>AI GROW</div>
+            {userProfile && <div style={{ fontSize: 11, color: '#6b7280', marginTop: -2 }}>{userProfile.name} · {levelInfo?.name}</div>}
+          </div>
+        </div>
+
+        {userProfile && levelInfo && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 12, color: '#f97316', fontWeight: 700 }}>🔥 {userProfile.streak}d</span>
+              <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)' }} />
+              <span style={{ fontSize: 12, color: '#a5b4fc', fontWeight: 700 }}>Lv.{levelInfo.level} {levelInfo.name}</span>
+            </div>
+            <div style={{ width: 80, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+              <div style={{ width: `${levelInfo.progress}%`, height: '100%', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', borderRadius: 3, transition: 'width 0.5s ease' }} />
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* Navigation Tabs */}
+      <div style={{ display: 'flex', gap: 0, background: 'rgba(12,14,20,0.8)', borderBottom: '1px solid rgba(255,255,255,0.06)', position: 'sticky', top: 64, zIndex: 40 }}>
+        {(['paths', 'chat', 'progress', 'settings'] as Tab[]).map(tab => {
+          const icons: Record<Tab, string> = { paths: '🗺️', chat: '💬', progress: '📊', settings: '⚙️' };
+          const labels: Record<Tab, string> = { paths: 'Explore', chat: 'Chat', progress: 'Progress', settings: 'Profile' };
+          const isActive = activeTab === tab;
+          return (
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex: 1, padding: '12px 8px', background: 'none', border: 'none', color: isActive ? '#a5b4fc' : '#6b7280', fontSize: 12, fontWeight: isActive ? 700 : 400, cursor: 'pointer', borderBottom: isActive ? '2px solid #6366f1' : '2px solid transparent', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, transition: 'color 0.2s', fontFamily: 'inherit' }}>
+              <span style={{ fontSize: 16 }}>{icons[tab]}</span>
+              <span>{labels[tab]}</span>
+              {tab === 'chat' && messages.length > 0 && (
+                <span style={{ position: 'absolute', top: 8, background: '#6366f1', color: '#fff', borderRadius: 10, padding: '1px 5px', fontSize: 9, fontWeight: 800 }}>{messages.filter(m => m.role === 'user').length}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: 'auto', position: 'relative', zIndex: 1 }}>
+
+        {/* ── EXPLORE TAB ── */}
+        {activeTab === 'paths' && (
+          <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
+            <div style={{ marginBottom: 24 }}>
+              <h2 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 6px', letterSpacing: '-0.5px' }}>
+                {userProfile ? `What are you learning today, ${userProfile.name}?` : 'Choose Your Learning Path'}
+              </h2>
+              <p style={{ color: '#6b7280', fontSize: 14, margin: 0 }}>
+                {userProfile ? `${userProfile.learningStyle.charAt(0).toUpperCase() + userProfile.learningStyle.slice(1)} learner · ${userProfile.skillLevel} level · ${userProfile.xp} XP earned` : 'Select a category below to get started'}
               </p>
             </div>
 
-            <ProfileSetupForm onComplete={createProfile} onSkip={() => setShowWelcome(false)} />
-          </div>
-        </div>
-      </div>
-    );
-  }
+            {/* Search */}
+            <div style={{ position: 'relative', marginBottom: 24 }}>
+              <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontSize: 16 }}>🔍</span>
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search questions across all topics..."
+                style={{ width: '100%', padding: '12px 16px 12px 42px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', color: '#e8eaf0', fontSize: 14, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+              />
+            </div>
 
-  return (
-    <main className="min-h-screen flex flex-col bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-indigo-900/20 dark:to-purple-900/20 text-gray-900 dark:text-gray-100">
-      {/* Header with Stats */}
-      <header className="sticky top-0 z-10 flex justify-between items-center p-4 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 shadow-lg">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-extrabold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-              AI GROW
-            </h1>
-            {userProfile && (
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-gray-600 dark:text-gray-400">
-                  Hey {userProfile.name}!
-                </span>
-                <span className="px-2 py-0.5 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-full text-[10px] font-bold">
-                  🔥 {currentStreak} day streak
-                </span>
+            {/* Category cards */}
+            <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+              {filteredPaths.map((path, idx) => {
+                const isOpen = activePath === idx;
+                return (
+                  <div key={idx} style={{ borderRadius: 18, border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)', overflow: 'hidden', transition: 'transform 0.2s, box-shadow 0.2s' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-3px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = `0 16px 48px rgba(${path.accent.replace('#','').match(/.{2}/g)?.map(h => parseInt(h,16)).join(',') ?? '0,0,0'},0.15)`; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = ''; (e.currentTarget as HTMLDivElement).style.boxShadow = ''; }}>
+                    <button onClick={() => setActivePath(isOpen ? null : idx)} style={{ width: '100%', padding: '18px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <div style={{ width: 46, height: 46, borderRadius: 12, background: `linear-gradient(135deg, ${path.accent}33, ${path.accent}22)`, border: `1px solid ${path.accent}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
+                        {path.icon}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: '#e8eaf0', marginBottom: 3 }}>{path.category}</div>
+                        <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.4 }}>{path.description}</div>
+                      </div>
+                      <span style={{ color: '#6b7280', fontSize: 18, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>›</span>
+                    </button>
+
+                    {isOpen && (
+                      <div style={{ padding: '0 20px 16px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div style={{ paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {path.questions.map((q, i) => (
+                            <button key={i} onClick={() => sendMessage(q, path.category)}
+                              style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: `1px solid rgba(255,255,255,0.07)`, color: '#c4c7d4', fontSize: 13, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', lineHeight: 1.4 }}
+                              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${path.accent}22`; (e.currentTarget as HTMLButtonElement).style.borderColor = `${path.accent}55`; (e.currentTarget as HTMLButtonElement).style.color = '#e8eaf0'; }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.07)'; (e.currentTarget as HTMLButtonElement).style.color = '#c4c7d4'; }}>
+                              {q}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {filteredPaths.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
+                <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>No results found</div>
+                <div style={{ fontSize: 14 }}>Try a different search term</div>
               </div>
             )}
           </div>
-        </div>
-        
-        <div className="flex gap-2">
-          {userProfile && (
-            <button
-              onClick={() => setShowStats(!showStats)}
-              className="px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:shadow-lg hover:scale-105 transition-all text-sm font-medium"
-              title="Your learning stats"
-            >
-              📊
-            </button>
-          )}
-          <button
-            onClick={clearHistory}
-            className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all text-sm"
-            title="Clear chat history"
-          >
-            🗑️
-          </button>
-          <button
-            onClick={toggleDarkMode}
-            className="px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 text-white hover:shadow-lg hover:scale-105 transition-all duration-200"
-          >
-            {darkMode ? '☀️' : '🌙'}
-          </button>
-        </div>
-      </header>
+        )}
 
-      {/* Stats Panel */}
-      {showStats && userProfile && (
-        <div className="p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-200/50 dark:border-gray-700/50">
-          <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl p-4 text-white">
-              <div className="text-3xl font-bold">{userProfile.totalChats}</div>
-              <div className="text-sm opacity-90">Total Chats</div>
-            </div>
-            <div className="bg-gradient-to-br from-orange-500 to-red-600 rounded-xl p-4 text-white">
-              <div className="text-3xl font-bold">{currentStreak}</div>
-              <div className="text-sm opacity-90">Day Streak 🔥</div>
-            </div>
-            <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl p-4 text-white">
-              <div className="text-xl font-bold capitalize">{userProfile.learningStyle}</div>
-              <div className="text-sm opacity-90">Learning Style</div>
-            </div>
-            <div className="bg-gradient-to-br from-pink-500 to-rose-600 rounded-xl p-4 text-white">
-              <div className="text-xl font-bold capitalize">{userProfile.skillLevel}</div>
-              <div className="text-sm opacity-90">Skill Level</div>
-            </div>
-          </div>
-        </div>
-      )}
+        {/* ── CHAT TAB ── */}
+        {activeTab === 'chat' && (
+          <div style={{ maxWidth: 760, margin: '0 auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16, minHeight: 'calc(100vh - 240px)' }}>
+            {messages.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
+                <div style={{ fontSize: 56, marginBottom: 16 }}>💬</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#e8eaf0', marginBottom: 8 }}>Start a conversation</div>
+                <div style={{ fontSize: 14, lineHeight: 1.6 }}>Ask anything, or explore the topics in the <button onClick={() => setActiveTab('paths')} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textDecoration: 'underline' }}>Explore tab</button></div>
+              </div>
+            )}
 
-      {/* Personalized Learning Paths */}
-      {messages.length === 0 && (
-        <section className="p-6 space-y-6 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm">
-          <div className="max-w-5xl mx-auto">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
-                {userProfile 
-                  ? `${userProfile.name}, what do you want to master today?` 
-                  : 'Choose Your Learning Path'}
-              </h2>
-              {userProfile && (
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Optimized for {userProfile.learningStyle} learners • {userProfile.skillLevel} level
-                </p>
-              )}
-            </div>
-            
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {learningPaths.map((path, idx) => (
-                <div
-                  key={idx}
-                  className="group bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-200/50 dark:border-gray-700/50 hover:shadow-2xl transition-all duration-300 hover:scale-[1.03] hover:-translate-y-1"
-                >
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${path.color} flex items-center justify-center text-2xl shadow-lg`}>
-                      {path.icon}
-                    </div>
-                    <h3 className="font-bold text-lg bg-gradient-to-r from-gray-800 to-gray-600 dark:from-gray-100 dark:to-gray-300 bg-clip-text text-transparent">
-                      {path.category.replace(/^[^\s]+ /, '')}
-                    </h3>
+            {messages.map((msg, idx) => {
+              const isLast = idx === messages.length - 1;
+              const isUser = msg.role === 'user';
+              return (
+                <div key={msg.id} style={{ display: 'flex', flexDirection: isUser ? 'row-reverse' : 'row', gap: 12, alignItems: 'flex-start', animation: 'fadeUp 0.3s ease' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: isUser ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'linear-gradient(135deg, #1e2130, #252840)', border: '1px solid rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>
+                    {isUser ? '👤' : '🧠'}
                   </div>
-                  <div className="space-y-2">
-                    {path.questions.map((q, i) => (
-                      <button
-                        key={i}
-                        onClick={() => getAIResponse(q, path.category)}
-                        className={`w-full px-4 py-3 text-sm text-left rounded-xl bg-gradient-to-r ${path.color} bg-opacity-10 hover:bg-opacity-100 hover:text-white border border-transparent hover:border-white/20 transition-all duration-200 hover:shadow-lg hover:scale-[1.02] group-hover:border-gray-200 dark:group-hover:border-gray-600`}
-                      >
-                        {q}
-                      </button>
+                  <div style={{ maxWidth: '78%' }}>
+                    {msg.category && !isUser && (
+                      <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{msg.category}</div>
+                    )}
+                    <div style={{ padding: '14px 18px', borderRadius: isUser ? '18px 4px 18px 18px' : '4px 18px 18px 18px', background: isUser ? 'linear-gradient(135deg, #4f46e5, #7c3aed)' : 'rgba(255,255,255,0.05)', border: isUser ? 'none' : '1px solid rgba(255,255,255,0.07)', fontSize: 14, lineHeight: 1.7, color: isUser ? '#fff' : '#d4d8e8', whiteSpace: 'pre-wrap' }}>
+                      {isLast && !isUser && !typingDone ? typingText : msg.text}
+                      {isLast && !isUser && !typingDone && <span style={{ display: 'inline-block', width: 2, height: 14, background: '#6366f1', animation: 'blink 1s infinite', marginLeft: 2, verticalAlign: 'text-bottom' }} />}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+                      <span style={{ fontSize: 10, color: '#4b5563' }}>{msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      {msg.tokens && <span style={{ fontSize: 10, color: '#374151' }}>~{msg.tokens} tokens</span>}
+                      {!isUser && (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {(['👍', '💡', '🔥', '📌'] as const).map(r => (
+                            <button key={r} onClick={() => addReaction(msg.id, r)}
+                              style={{ background: msg.reaction === r ? 'rgba(99,102,241,0.2)' : 'none', border: 'none', cursor: 'pointer', fontSize: 12, padding: '2px 5px', borderRadius: 6, opacity: msg.reaction && msg.reaction !== r ? 0.3 : 1, transition: 'all 0.15s' }}>
+                              {r}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {isTyping && (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', animation: 'fadeUp 0.3s ease' }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg, #1e2130, #252840)', border: '1px solid rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🧠</div>
+                <div style={{ padding: '14px 18px', borderRadius: '4px 18px 18px 18px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                    {[0, 1, 2].map(i => (
+                      <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: '#6366f1', animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
                     ))}
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+              </div>
+            )}
 
-      {/* Chat Messages with Enhanced UI */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        <div className="max-w-4xl mx-auto space-y-4">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-slideIn`}
-            >
-              <div className="flex items-end gap-2 max-w-[85%] md:max-w-[75%]">
-                {msg.role === 'ai' && (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center text-white font-bold shadow-lg mb-1 flex-shrink-0">
-                    AI
+            <div ref={chatEndRef} />
+          </div>
+        )}
+
+        {/* ── PROGRESS TAB ── */}
+        {activeTab === 'progress' && (
+          <div style={{ maxWidth: 700, margin: '0 auto', padding: '24px 16px' }}>
+            {!userProfile ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>📊</div>
+                <div style={{ fontSize: 18, fontWeight: 600 }}>Set up your profile to track progress</div>
+              </div>
+            ) : (
+              <>
+                {/* Level card */}
+                {levelInfo && (
+                  <div style={{ borderRadius: 20, background: 'linear-gradient(135deg, #1a1c2e, #1e1f35)', border: '1px solid rgba(99,102,241,0.3)', padding: 24, marginBottom: 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                      <div>
+                        <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>CURRENT LEVEL</div>
+                        <div style={{ fontSize: 28, fontWeight: 800, background: 'linear-gradient(135deg, #a5b4fc, #f9a8d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{levelInfo.name}</div>
+                        <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>Level {levelInfo.level} · {userProfile.xp} XP total</div>
+                      </div>
+                      <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>
+                        {['🌱','🌿','📖','🗺️','💭','🎯','🔮','⚡','🏆','👑'][levelInfo.level]}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+                      {levelInfo.xpToNext > 0 ? `${levelInfo.xpToNext} XP to next level` : 'Maximum level reached!'}
+                    </div>
+                    <div style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${levelInfo.progress}%`, background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', borderRadius: 4, transition: 'width 0.8s ease' }} />
+                    </div>
                   </div>
                 )}
-                <div
-                  className={`p-4 rounded-2xl shadow-lg ${
-                    msg.role === 'user'
-                      ? 'bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 text-white rounded-br-sm'
-                      : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-sm border-2 border-indigo-200 dark:border-indigo-800'
-                  }`}
-                >
-                  {msg.category && msg.role === 'ai' && (
-                    <div className="text-xs font-semibold mb-2 opacity-70">
-                      {msg.category}
+
+                {/* Stats grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                  {[
+                    { label: 'Conversations', value: userProfile.totalChats, icon: '💬', color: '#6366f1' },
+                    { label: 'Day Streak', value: `${userProfile.streak}🔥`, icon: '🔥', color: '#f97316' },
+                    { label: 'Total XP', value: userProfile.xp, icon: '⚡', color: '#10b981' },
+                    { label: 'Achievements', value: `${userProfile.achievements.length}/${ACHIEVEMENTS.length}`, icon: '🏆', color: '#f59e0b' },
+                  ].map((s, i) => (
+                    <div key={i} style={{ borderRadius: 16, padding: '18px 20px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                      <div style={{ fontSize: 24, marginBottom: 8 }}>{s.icon}</div>
+                      <div style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{s.label}</div>
                     </div>
-                  )}
-                  <div className="text-[15px] leading-relaxed whitespace-pre-wrap">
-                    {formatMessage(msg.text)}
-                  </div>
-                  <div
-                    className={`text-[10px] mt-2 flex items-center gap-2 ${
-                      msg.role === 'user'
-                        ? 'text-indigo-100'
-                        : 'text-gray-500 dark:text-gray-500'
-                    }`}
-                  >
-                    <span>{msg.timestamp.toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}</span>
-                    {msg.role === 'user' && <span>✓✓</span>}
-                  </div>
+                  ))}
                 </div>
-              </div>
-            </div>
-          ))}
 
-          {isTyping && (
-            <div className="flex justify-start animate-slideIn">
-              <div className="flex items-end gap-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center text-white font-bold shadow-lg mb-1 flex-shrink-0">
-                  AI
-                </div>
-                <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl rounded-bl-sm shadow-lg border-2 border-indigo-200 dark:border-indigo-800">
-                  <div className="flex gap-1">
-                    <span className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                {/* Achievements */}
+                <div style={{ borderRadius: 20, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', padding: 20 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>🏆 Achievements</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {ACHIEVEMENTS.map(a => {
+                      const earned = userProfile.achievements.includes(a.id);
+                      return (
+                        <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12, background: earned ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)', border: `1px solid ${earned ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)'}`, opacity: earned ? 1 : 0.5 }}>
+                          <span style={{ fontSize: 20 }}>{earned ? a.label.split(' ')[0] : '🔒'}</span>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: earned ? '#e8eaf0' : '#6b7280' }}>{a.label.split(' ').slice(1).join(' ')}</div>
+                            <div style={{ fontSize: 11, color: '#4b5563' }}>{a.desc}</div>
+                          </div>
+                          {earned && <div style={{ marginLeft: 'auto', width: 20, height: 20, borderRadius: '50%', background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>✓</div>}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
+              </>
+            )}
+          </div>
+        )}
 
-          <div ref={chatEndRef} />
-        </div>
+        {/* ── SETTINGS TAB ── */}
+        {activeTab === 'settings' && (
+          <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
+            {userProfile ? (
+              <>
+                <div style={{ borderRadius: 20, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', padding: 24, marginBottom: 16 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>👤 Your Profile</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {[
+                      { label: 'Name', value: userProfile.name },
+                      { label: 'Learning Style', value: userProfile.learningStyle.charAt(0).toUpperCase() + userProfile.learningStyle.slice(1) },
+                      { label: 'Skill Level', value: userProfile.skillLevel.charAt(0).toUpperCase() + userProfile.skillLevel.slice(1) },
+                      { label: 'Interests', value: userProfile.interests.join(', ') },
+                    ].map(({ label, value }) => (
+                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <span style={{ fontSize: 13, color: '#6b7280' }}>{label}</span>
+                        <span style={{ fontSize: 13, color: '#e8eaf0', fontWeight: 500 }}>{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <button onClick={() => { setMessages([]); localStorage.removeItem('aigrow_messages'); }} style={{ padding: '14px 20px', borderRadius: 14, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                    🗑️ Clear Chat History
+                  </button>
+                  <button onClick={() => { localStorage.clear(); setUserProfile(null); setMessages([]); setShowSetup(true); }} style={{ padding: '14px 20px', borderRadius: 14, background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', color: '#f87171', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                    🔄 Reset All Data & Start Over
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                <button onClick={() => setShowSetup(true)} style={{ padding: '16px 32px', borderRadius: 16, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Set Up Profile
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Enhanced Input Area */}
-      <div className="sticky bottom-0 p-4 border-t border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl shadow-2xl">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex gap-2 mb-2">
-            <input
+      {/* Input bar (always visible on chat tab) */}
+      {activeTab === 'chat' && (
+        <div style={{ position: 'sticky', bottom: 0, background: 'rgba(12,14,20,0.95)', backdropFilter: 'blur(16px)', borderTop: '1px solid rgba(255,255,255,0.06)', padding: '16px', zIndex: 40 }}>
+          <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+            <textarea
               ref={inputRef}
-              className="flex-1 px-5 py-4 rounded-2xl border-2 border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-800 focus:border-purple-500 focus:ring-4 focus:ring-purple-500/20 outline-none transition-all text-gray-900 dark:text-gray-100 placeholder-gray-500 shadow-lg"
-              placeholder={userProfile ? `Ask me anything, ${userProfile.name}... I will adapt to your ${userProfile.learningStyle} style!` : "Ask me anything..."}
+              rows={1}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              onChange={e => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px'; }}
+              onKeyDown={handleKeyDown}
+              placeholder={userProfile ? `Ask anything, ${userProfile.name}… (Enter to send, Shift+Enter for new line)` : 'Ask anything…'}
+              style={{ flex: 1, padding: '12px 16px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.06)', color: '#e8eaf0', fontSize: 14, outline: 'none', resize: 'none', fontFamily: 'inherit', lineHeight: 1.5, transition: 'border-color 0.2s', minHeight: 46 }}
+              onFocus={e => (e.target.style.borderColor = 'rgba(99,102,241,0.5)')}
+              onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}
             />
-            <button
-              onClick={handleSend}
-              disabled={!input.trim()}
-              className="px-8 py-4 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 text-white font-bold hover:shadow-2xl hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-lg"
-            >
-              Send ✨
+            <button onClick={() => sendMessage(input)} disabled={!input.trim() || isTyping}
+              style={{ width: 46, height: 46, borderRadius: 12, background: input.trim() && !isTyping ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(255,255,255,0.06)', border: 'none', color: '#fff', fontSize: 18, cursor: input.trim() && !isTyping ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', flexShrink: 0 }}>
+              {isTyping ? '⏳' : '↑'}
             </button>
           </div>
-          <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-500 px-2">
-            <span>
-              🧠 Powered by AI GROW • Adapts to your learning style
-            </span>
-            {userProfile && (
-              <button
-                onClick={() => setShowProfileSetup(true)}
-                className="hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
-              >
-                ⚙️ Update preferences
+          <div style={{ maxWidth: 760, margin: '6px auto 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: '#374151' }}>Powered by AI GROW · Adapts to your {userProfile?.learningStyle ?? 'learning'} style</span>
+            {messages.length > 0 && (
+              <button onClick={() => { setMessages([]); localStorage.removeItem('aigrow_messages'); }}
+                style={{ fontSize: 11, color: '#4b5563', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>
+                Clear chat
               </button>
             )}
           </div>
         </div>
-      </div>
+      )}
 
-      <style jsx>{`
-        @keyframes slideIn {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-slideIn {
-          animation: slideIn 0.4s ease-out;
-        }
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&display=swap');
+        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes bounce { 0%,80%,100% { transform:translateY(0); } 40% { transform:translateY(-6px); } }
+        @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+        @keyframes slideInRight { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+        * { scrollbar-width: thin; scrollbar-color: rgba(99,102,241,0.3) transparent; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.3); border-radius: 2px; }
       `}</style>
-    </main>
+    </div>
   );
 }
 
-// Profile Setup Component
-function ProfileSetupForm({ 
-  onComplete, 
-  onSkip 
-}: { 
-  onComplete: (name: string, style: UserProfile['learningStyle'], level: UserProfile['skillLevel'], interests: string[]) => void;
+// ─── SETUP SCREEN ─────────────────────────────────────────────────────────────
+
+function SetupScreen({
+  onComplete, onSkip
+}: {
+  onComplete: (p: UserProfile) => void;
   onSkip: () => void;
 }) {
   const [step, setStep] = useState(1);
   const [name, setName] = useState('');
-  const [learningStyle, setLearningStyle] = useState<UserProfile['learningStyle']>('conversational');
-  const [skillLevel, setSkillLevel] = useState<UserProfile['skillLevel']>('beginner');
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+  const [style, setStyle] = useState<UserProfile['learningStyle']>('conversational');
+  const [level, setLevel] = useState<UserProfile['skillLevel']>('beginner');
+  const [interests, setInterests] = useState<string[]>([]);
 
-  const interests = [
-    'Career Growth', 'AI & Tech', 'Entrepreneurship', 
-    'Personal Development', 'Productivity', 'Finance',
-    'Health & Fitness', 'Creative Skills', 'Leadership'
-  ];
+  const allInterests = ['Career Growth', 'AI & Tech', 'Entrepreneurship', 'Personal Development', 'Productivity', 'Finance', 'Health & Fitness', 'Creative Skills', 'Leadership'];
 
-  const handleComplete = () => {
-    if (name && selectedInterests.length > 0) {
-      onComplete(name, learningStyle, skillLevel, selectedInterests);
-    }
+  const complete = () => {
+    const p: UserProfile = {
+      name: name || 'Learner', learningStyle: style, skillLevel: level, interests,
+      streak: 1, totalChats: 0, xp: 0, level: 0, achievements: [],
+      lastVisit: new Date().toISOString(),
+    };
+    onComplete(p);
   };
 
   return (
-    <div className="space-y-6">
-      {step === 1 && (
-        <div className="space-y-4">
-          <h3 className="text-xl font-bold text-center">What should I call you?</h3>
-          <input
-            type="text"
-            placeholder="Your name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full px-5 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all"
-            autoFocus
-            onKeyDown={(e) => e.key === 'Enter' && name && setStep(2)}
-          />
-          <button
-            onClick={() => name && setStep(2)}
-            disabled={!name}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 text-white font-medium hover:shadow-lg hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next →
-          </button>
-        </div>
-      )}
+    <div style={{ minHeight: '100vh', background: '#0c0e14', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', top: -200, right: -200, width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%)' }} />
+        <div style={{ position: 'absolute', bottom: -100, left: -100, width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.1) 0%, transparent 70%)' }} />
+      </div>
 
-      {step === 2 && (
-        <div className="space-y-4">
-          <h3 className="text-xl font-bold text-center">How do you learn best?</h3>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { value: 'visual', label: '📊 Visual', desc: 'Diagrams & charts' },
-              { value: 'practical', label: '🎯 Practical', desc: 'Hands-on steps' },
-              { value: 'theoretical', label: '📚 Theoretical', desc: 'Deep concepts' },
-              { value: 'conversational', label: '💬 Conversational', desc: 'Chat-style' },
-            ].map((style) => (
-              <button
-                key={style.value}
-                onClick={() => setLearningStyle(style.value as UserProfile['learningStyle'])}
-                className={`p-4 rounded-xl border-2 transition-all ${
-                  learningStyle === style.value
-                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                    : 'border-gray-200 dark:border-gray-600 hover:border-purple-300'
-                }`}
-              >
-                <div className="font-bold">{style.label}</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400">{style.desc}</div>
+      <div style={{ maxWidth: 480, width: '100%', position: 'relative', zIndex: 1 }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 36 }}>
+          <div style={{ width: 72, height: 72, borderRadius: 20, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto 20px' }}>🧠</div>
+          <h1 style={{ fontSize: 32, fontWeight: 800, background: 'linear-gradient(135deg, #a5b4fc, #f9a8d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: '0 0 8px', letterSpacing: '-1px' }}>Welcome to AI GROW</h1>
+          <p style={{ color: '#6b7280', fontSize: 15, margin: 0 }}>Your AI adapts to how YOU learn best</p>
+        </div>
+
+        {/* Step indicator */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 32, justifyContent: 'center' }}>
+          {[1, 2, 3, 4].map(s => (
+            <div key={s} style={{ width: s === step ? 32 : 8, height: 8, borderRadius: 4, background: s <= step ? 'linear-gradient(90deg, #6366f1, #8b5cf6)' : 'rgba(255,255,255,0.1)', transition: 'all 0.3s ease' }} />
+          ))}
+        </div>
+
+        <div style={{ borderRadius: 24, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', padding: 32 }}>
+          {step === 1 && (
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: '#e8eaf0', marginBottom: 6 }}>What should I call you?</h2>
+              <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 24 }}>I will personalize everything to you.</p>
+              <input
+                autoFocus type="text" value={name} placeholder="Your first name"
+                onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && name && setStep(2)}
+                style={{ width: '100%', padding: '14px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.06)', color: '#e8eaf0', fontSize: 16, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', marginBottom: 20 }}
+              />
+              <button onClick={() => setStep(2)} disabled={!name}
+                style={{ width: '100%', padding: '14px', borderRadius: 12, background: name ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(255,255,255,0.06)', border: 'none', color: name ? '#fff' : '#4b5563', fontSize: 15, fontWeight: 700, cursor: name ? 'pointer' : 'not-allowed', fontFamily: 'inherit', transition: 'all 0.2s' }}>
+                Continue →
               </button>
-            ))}
-          </div>
-          <button
-            onClick={() => setStep(3)}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 text-white font-medium hover:shadow-lg hover:scale-105 transition-all duration-200"
-          >
-            Next →
-          </button>
-        </div>
-      )}
+            </div>
+          )}
 
-      {step === 3 && (
-        <div className="space-y-4">
-          <h3 className="text-xl font-bold text-center">Your skill level?</h3>
-          <div className="space-y-2">
-            {[
-              { value: 'beginner', label: '🌱 Beginner', desc: 'Just starting out' },
-              { value: 'intermediate', label: '🚀 Intermediate', desc: 'Some experience' },
-              { value: 'advanced', label: '⚡ Advanced', desc: 'Deep knowledge' },
-            ].map((level) => (
-              <button
-                key={level.value}
-                onClick={() => setSkillLevel(level.value as UserProfile['skillLevel'])}
-                className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
-                  skillLevel === level.value
-                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                    : 'border-gray-200 dark:border-gray-600 hover:border-purple-300'
-                }`}
-              >
-                <div className="font-bold">{level.label}</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400">{level.desc}</div>
+          {step === 2 && (
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: '#e8eaf0', marginBottom: 6 }}>How do you learn best?</h2>
+              <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 24 }}>I will adapt every answer to your style.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+                {[
+                  { v: 'conversational', e: '💬', l: 'Conversational', d: 'Stories & dialogue' },
+                  { v: 'practical', e: '🎯', l: 'Practical', d: 'Step-by-step action' },
+                  { v: 'theoretical', e: '📚', l: 'Theoretical', d: 'Deep concepts' },
+                  { v: 'visual', e: '📊', l: 'Visual', d: 'Frameworks & charts' },
+                ].map(s => (
+                  <button key={s.v} onClick={() => setStyle(s.v as UserProfile['learningStyle'])}
+                    style={{ padding: '14px 12px', borderRadius: 14, border: `1.5px solid ${style === s.v ? '#6366f1' : 'rgba(255,255,255,0.08)'}`, background: style === s.v ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', transition: 'all 0.2s' }}>
+                    <div style={{ fontSize: 22, marginBottom: 6 }}>{s.e}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: style === s.v ? '#a5b4fc' : '#e8eaf0' }}>{s.l}</div>
+                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{s.d}</div>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setStep(3)} style={{ width: '100%', padding: '14px', borderRadius: 12, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Continue →</button>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: '#e8eaf0', marginBottom: 6 }}>Your experience level?</h2>
+              <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 24 }}>No right answer — be honest for the best results.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                {[
+                  { v: 'beginner', e: '🌱', l: 'Beginner', d: 'Just starting to explore these topics' },
+                  { v: 'intermediate', e: '🚀', l: 'Intermediate', d: 'Have some experience and context' },
+                  { v: 'advanced', e: '⚡', l: 'Advanced', d: 'Deep knowledge, want nuanced insights' },
+                ].map(l => (
+                  <button key={l.v} onClick={() => setLevel(l.v as UserProfile['skillLevel'])}
+                    style={{ padding: '14px 16px', borderRadius: 14, border: `1.5px solid ${level === l.v ? '#6366f1' : 'rgba(255,255,255,0.08)'}`, background: level === l.v ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 14, transition: 'all 0.2s' }}>
+                    <span style={{ fontSize: 24 }}>{l.e}</span>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: level === l.v ? '#a5b4fc' : '#e8eaf0' }}>{l.l}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280' }}>{l.d}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setStep(4)} style={{ width: '100%', padding: '14px', borderRadius: 12, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Continue →</button>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: '#e8eaf0', marginBottom: 6 }}>What interests you most?</h2>
+              <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 24 }}>Pick 2-3 topics you want to grow in.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 20 }}>
+                {allInterests.map(t => {
+                  const sel = interests.includes(t);
+                  return (
+                    <button key={t} onClick={() => sel ? setInterests(interests.filter(x => x !== t)) : interests.length < 3 && setInterests([...interests, t])}
+                      style={{ padding: '10px 8px', borderRadius: 12, border: `1.5px solid ${sel ? '#6366f1' : 'rgba(255,255,255,0.08)'}`, background: sel ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)', color: sel ? '#a5b4fc' : '#9ca3af', fontSize: 11, fontWeight: sel ? 700 : 400, cursor: interests.length >= 3 && !sel ? 'not-allowed' : 'pointer', fontFamily: 'inherit', textAlign: 'center', lineHeight: 1.3, transition: 'all 0.2s', opacity: interests.length >= 3 && !sel ? 0.4 : 1 }}>
+                      {t}
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={complete} disabled={interests.length === 0}
+                style={{ width: '100%', padding: '14px', borderRadius: 12, background: interests.length > 0 ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(255,255,255,0.06)', border: 'none', color: interests.length > 0 ? '#fff' : '#4b5563', fontSize: 15, fontWeight: 700, cursor: interests.length > 0 ? 'pointer' : 'not-allowed', fontFamily: 'inherit', transition: 'all 0.2s' }}>
+                Start Learning 🚀
               </button>
-            ))}
-          </div>
-          <button
-            onClick={() => setStep(4)}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 text-white font-medium hover:shadow-lg hover:scale-105 transition-all duration-200"
-          >
-            Next →
+            </div>
+          )}
+
+          <button onClick={onSkip} style={{ width: '100%', padding: '10px', marginTop: 12, background: 'none', border: 'none', color: '#4b5563', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Skip setup and explore
           </button>
         </div>
-      )}
-
-      {step === 4 && (
-        <div className="space-y-4">
-          <h3 className="text-xl font-bold text-center">What interests you? (Pick 2-3)</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {interests.map((interest) => (
-              <button
-                key={interest}
-                onClick={() => {
-                  if (selectedInterests.includes(interest)) {
-                    setSelectedInterests(selectedInterests.filter(i => i !== interest));
-                  } else if (selectedInterests.length < 3) {
-                    setSelectedInterests([...selectedInterests, interest]);
-                  }
-                }}
-                className={`p-3 rounded-xl border-2 transition-all text-sm ${
-                  selectedInterests.includes(interest)
-                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 font-bold'
-                    : 'border-gray-200 dark:border-gray-600 hover:border-purple-300'
-                }`}
-              >
-                {interest}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={handleComplete}
-            disabled={selectedInterests.length === 0}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 text-white font-medium hover:shadow-lg hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Start Learning! 🚀
-          </button>
-        </div>
-      )}
-
-      <button
-        onClick={onSkip}
-        className="w-full py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors text-sm"
-      >
-        Skip setup
-      </button>
+      </div>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&display=swap');`}</style>
     </div>
   );
 }
